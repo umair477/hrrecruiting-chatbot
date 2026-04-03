@@ -1,0 +1,41 @@
+# --- Backend / Python ---
+venv/
+ENV/
+env/
+.venv/
+bin/
+lib/
+include/
+__pycache__/
+*.py[cod]
+
+# --- React / Frontend ---
+node_modules/
+/build
+/dist
+.eslintcache
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# --- Sensitive Files (React & Backend) ---
+.env
+.env.local
+.env.local.example
+.env.development.local
+.env.test.local
+.env.production.local
+*.pem
+*.key
+
+# --- Project Specific (Your Request) ---
+[Ss]print*
+sprint/
+docs/
+docker-compose.yml
+docker.compose.yml
+tests/
+test/
+*test.py
+*.spec.js
+*.test.js
