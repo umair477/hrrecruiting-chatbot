@@ -4,7 +4,7 @@ from datetime import date, datetime
 from enum import Enum
 from typing import Any, Optional
 
-from sqlalchemy import Column, JSON, Text
+from sqlalchemy import Column, Enum as SQLEnum, JSON, Text
 from sqlmodel import Field, SQLModel
 
 
@@ -17,7 +17,26 @@ class UserRole(str, Enum):
 class LeaveStatus(str, Enum):
     PENDING = "pending"
     APPROVED = "approved"
-    DENIED = "denied"
+    REJECTED = "rejected"
+    DENIED = "rejected"
+
+
+class LeaveType(str, Enum):
+    ANNUAL = "Annual"
+    SICK = "Sick"
+    CASUAL = "Casual"
+    UNPAID = "Unpaid"
+
+
+class JobStatus(str, Enum):
+    OPEN = "open"
+    CLOSED = "closed"
+
+
+class EmploymentType(str, Enum):
+    FULL_TIME = "Full-time"
+    PART_TIME = "Part-time"
+    CONTRACT = "Contract"
 
 
 class CandidateStatus(str, Enum):
@@ -47,19 +66,49 @@ class User(SQLModel, table=True):
 class Employee(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str
+    full_name: str = Field(default="")
+    official_email: str = Field(default="", index=True)
     department: str
-    annual_allowance: float = Field(default=18)
+    designation: str = Field(default="")
+    date_of_joining: date = Field(default_factory=date.today)
+    password_hash: Optional[str] = Field(default=None)
+    is_active: bool = Field(default=True)
+    failed_login_attempts: int = Field(default=0)
+    locked_until: Optional[datetime] = Field(default=None)
+    last_login_at: Optional[datetime] = Field(default=None)
+    annual_allowance: float = Field(default=20)
     leave_balance: float = Field(default=0)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class Job(SQLModel, table=True):
+    __tablename__ = "jobs"
+
+    job_id: Optional[int] = Field(default=None, primary_key=True)
+    title: str = Field(index=True)
+    description: str = Field(default="", sa_column=Column(Text, nullable=False))
+    required_skills: list[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
+    experience_years: int = Field(default=0)
+    employment_type: EmploymentType = Field(default=EmploymentType.FULL_TIME)
+    salary_range: Optional[str] = Field(default=None)
+    responsibilities: list[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
+    nice_to_have_qualifications: list[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
+    status: JobStatus = Field(default=JobStatus.OPEN)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class Candidate(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
+    first_name: str = Field(default="")
+    last_name: str = Field(default="")
     name: str
     email: str = Field(index=True, unique=True)
+    job_id: Optional[int] = Field(default=None, foreign_key="jobs.job_id", index=True)
     role_title: str
     resume_text: str = Field(sa_column=Column(Text, nullable=False))
     job_description: str = Field(default="", sa_column=Column(Text, nullable=False))
+    cv_summary: str = Field(default="", sa_column=Column(Text, nullable=False))
     ai_score: int = Field(default=0)
     resume_score: int = Field(default=0)
     interview_score: int = Field(default=0)
@@ -78,13 +127,55 @@ class Candidate(SQLModel, table=True):
 class LeaveRequest(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     employee_id: int = Field(foreign_key="employee.id", index=True)
+    leave_type: LeaveType = Field(
+        default=LeaveType.ANNUAL,
+        sa_column=Column(
+            SQLEnum(
+                LeaveType,
+                values_callable=lambda enum_cls: [member.value for member in enum_cls],
+                native_enum=False,
+                validate_strings=True,
+            ),
+            nullable=False,
+            default=LeaveType.ANNUAL.value,
+        ),
+    )
     start_date: date
     end_date: date
+    total_days: int = Field(default=1)
     reason: str
     status: LeaveStatus = Field(default=LeaveStatus.PENDING)
+    hr_note: str = Field(default="")
     handover_contact: str = Field(default="")
     handover_notes: str = Field(default="")
     urgency_level: str = Field(default="medium")
     privacy_flagged: bool = Field(default=False)
     transcript: list[dict[str, str]] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
+    submitted_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class LeaveQuota(SQLModel, table=True):
+    __tablename__ = "leave_quota"
+
+    quota_id: Optional[int] = Field(default=None, primary_key=True)
+    employee_id: int = Field(foreign_key="employee.id", index=True)
+    year: int = Field(index=True)
+    annual_total: int = Field(default=20)
+    annual_used: int = Field(default=0)
+    sick_total: int = Field(default=10)
+    sick_used: int = Field(default=0)
+    casual_total: int = Field(default=5)
+    casual_used: int = Field(default=0)
+    unpaid_used: int = Field(default=0)
+
+
+class TokenBlocklist(SQLModel, table=True):
+    __tablename__ = "token_blocklist"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    token_hash: str = Field(index=True, unique=True)
+    user_id: Optional[int] = Field(default=None, foreign_key="user.id")
+    employee_id: Optional[int] = Field(default=None, foreign_key="employee.id")
+    expires_at: datetime
     created_at: datetime = Field(default_factory=datetime.utcnow)

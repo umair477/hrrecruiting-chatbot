@@ -5,7 +5,7 @@ from sqlmodel import Session, select
 
 from backend.app.core.database import get_session
 from backend.app.deps import require_roles
-from backend.app.models import Candidate, CandidateStatus, User, UserRole
+from backend.app.models import Candidate, CandidateStatus, Job, JobStatus, User, UserRole
 from backend.app.schemas import (
     CandidateApplicationRequest,
     CandidateApplicationStatusResponse,
@@ -13,7 +13,9 @@ from backend.app.schemas import (
     CandidateRead,
     CandidateScoreResponse,
     InterviewAnswerRequest,
+    PublicJobRead,
 )
+from backend.app.services.admin_dashboard import split_full_name
 from backend.app.services.recruitment import (
     build_candidate_interview_payload,
     get_current_question,
@@ -25,6 +27,14 @@ from backend.app.services.recruitment import (
 )
 
 router = APIRouter(prefix="/recruitment", tags=["recruitment"])
+
+
+@router.get("/jobs", response_model=list[PublicJobRead])
+def list_open_jobs(session: Session = Depends(get_session)) -> list[PublicJobRead]:
+    jobs = session.exec(
+        select(Job).where(Job.status == JobStatus.OPEN).order_by(Job.created_at.desc())
+    ).all()
+    return [PublicJobRead.model_validate(job) for job in jobs]
 
 
 @router.get("/candidates", response_model=list[CandidateRead])
@@ -67,25 +77,47 @@ def apply_for_job(
     current_user: User = Depends(require_roles(UserRole.CANDIDATE)),
     session: Session = Depends(get_session),
 ) -> CandidateApplicationStatusResponse:
+    selected_job = session.get(Job, payload.job_id) if payload.job_id is not None else None
+    if payload.job_id is not None and selected_job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Selected job not found.")
+
+    role_title = selected_job.title if selected_job is not None else (payload.role_title or "").strip()
+    job_description = selected_job.description if selected_job is not None else (payload.job_description or "").strip()
+    if not role_title or not job_description:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Either a valid job_id or both role_title and job_description are required.",
+        )
+
+    first_name, last_name = split_full_name(current_user.full_name)
     candidate = session.get(Candidate, current_user.candidate_id) if current_user.candidate_id else None
     if candidate is None:
         candidate = session.exec(select(Candidate).where(Candidate.email == current_user.email)).first()
 
     if candidate is None:
         candidate = Candidate(
+            first_name=first_name,
+            last_name=last_name,
             name=current_user.full_name,
             email=current_user.email,
-            role_title=payload.role_title,
+            job_id=selected_job.job_id if selected_job is not None else None,
+            role_title=role_title,
             resume_text="",
-            job_description=payload.job_description,
+            job_description=job_description,
+            cv_summary="Application submitted. CV summary will appear after resume screening.",
             status=CandidateStatus.UNDER_REVIEW,
             summary="Application submitted. Resume screening and recruiter review are pending.",
         )
     else:
+        candidate.first_name = first_name
+        candidate.last_name = last_name
         candidate.name = current_user.full_name
         candidate.email = current_user.email
-        candidate.role_title = payload.role_title
-        candidate.job_description = payload.job_description
+        candidate.job_id = selected_job.job_id if selected_job is not None else candidate.job_id
+        candidate.role_title = role_title
+        candidate.job_description = job_description
+        if not candidate.cv_summary:
+            candidate.cv_summary = "Application submitted. CV summary will appear after resume screening."
         if not candidate.summary:
             candidate.summary = "Application submitted. Resume screening and recruiter review are pending."
         if candidate.status == CandidateStatus.REJECTED:
@@ -116,16 +148,26 @@ def score_resume_endpoint(
     session: Session = Depends(get_session),
 ) -> CandidateScoreResponse:
     resume_text = parse_resume_file(resume)
+    first_name, last_name = split_full_name(candidate_name)
+    matching_job = session.exec(select(Job).where(Job.title == role_title)).first()
     candidate = session.exec(select(Candidate).where(Candidate.email == email)).first()
     if candidate is None:
         candidate = Candidate(
+            first_name=first_name,
+            last_name=last_name,
             name=candidate_name,
             email=email,
+            job_id=matching_job.job_id if matching_job is not None else None,
             role_title=role_title,
             resume_text=resume_text,
             job_description=job_description,
             status=CandidateStatus.UNDER_REVIEW,
         )
+    else:
+        candidate.first_name = first_name
+        candidate.last_name = last_name
+        if matching_job is not None:
+            candidate.job_id = matching_job.job_id
     scoring = initialize_candidate_interview(
         candidate,
         candidate_name=candidate_name,

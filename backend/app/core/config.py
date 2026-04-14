@@ -30,6 +30,12 @@ class Settings:
     slack_signing_secret: str = os.getenv("SLACK_SIGNING_SECRET", "")
     teams_app_id: str = os.getenv("TEAMS_APP_ID", "")
     teams_app_password: str = os.getenv("TEAMS_APP_PASSWORD", "")
+    employee_auth_cookie_name: str = os.getenv("EMPLOYEE_AUTH_COOKIE_NAME", "employee_access_token")
+    employee_auth_cookie_secure: bool = os.getenv("EMPLOYEE_AUTH_COOKIE_SECURE", "false").lower() == "true"
+    employee_auth_cookie_samesite: str = os.getenv("EMPLOYEE_AUTH_COOKIE_SAMESITE", "lax")
+    employee_token_expire_hours: int = int(os.getenv("EMPLOYEE_TOKEN_EXPIRE_HOURS", "24"))
+    employee_login_max_attempts: int = int(os.getenv("EMPLOYEE_LOGIN_MAX_ATTEMPTS", "5"))
+    employee_login_lock_minutes: int = int(os.getenv("EMPLOYEE_LOGIN_LOCK_MINUTES", "15"))
 
 
 settings = Settings()

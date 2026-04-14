@@ -48,9 +48,59 @@ checkpoint_writes_table = Table(
 def create_db_and_tables() -> None:
     SQLModel.metadata.create_all(engine)
     checkpoint_metadata.create_all(engine)
+    _ensure_employee_auth_columns()
     _ensure_leave_schema_columns()
     _ensure_candidate_interview_columns()
+    _migrate_leave_statuses()
     _migrate_user_roles()
+
+
+def _ensure_employee_auth_columns() -> None:
+    inspector = inspect(engine)
+    try:
+        employee_columns = {column["name"] for column in inspector.get_columns("employee")}
+    except Exception:
+        logger.exception("Database Error: failed to inspect employee table for auth columns.")
+        return
+
+    employee_missing = {
+        "full_name": "TEXT NOT NULL DEFAULT ''",
+        "official_email": "TEXT NOT NULL DEFAULT ''",
+        "designation": "TEXT NOT NULL DEFAULT ''",
+        "date_of_joining": "DATE",
+        "password_hash": "TEXT",
+        "is_active": "BOOLEAN NOT NULL DEFAULT TRUE",
+        "failed_login_attempts": "INTEGER NOT NULL DEFAULT 0",
+        "locked_until": "TIMESTAMP",
+        "last_login_at": "TIMESTAMP",
+    }
+
+    try:
+        with engine.begin() as connection:
+            for column_name, definition in employee_missing.items():
+                if column_name not in employee_columns:
+                    connection.execute(text(f"ALTER TABLE employee ADD COLUMN {column_name} {definition}"))
+
+            connection.execute(
+                text(
+                    """
+                    UPDATE employee
+                    SET full_name = name
+                    WHERE COALESCE(full_name, '') = ''
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    """
+                    UPDATE employee
+                    SET date_of_joining = CURRENT_DATE
+                    WHERE date_of_joining IS NULL
+                    """
+                )
+            )
+    except Exception:
+        logger.exception("Database Error: failed to add missing employee auth columns.")
 
 
 def _ensure_leave_schema_columns() -> None:
@@ -63,10 +113,14 @@ def _ensure_leave_schema_columns() -> None:
         return
 
     employee_missing = {
-        "annual_allowance": "FLOAT NOT NULL DEFAULT 18",
+        "annual_allowance": "FLOAT NOT NULL DEFAULT 20",
     }
     leave_missing = {
         "handover_contact": "TEXT NOT NULL DEFAULT ''",
+        "leave_type": "VARCHAR NOT NULL DEFAULT 'Annual'",
+        "total_days": "INTEGER NOT NULL DEFAULT 1",
+        "hr_note": "TEXT NOT NULL DEFAULT ''",
+        "submitted_at": "TIMESTAMP",
     }
 
     try:
@@ -111,7 +165,11 @@ def _candidate_column_definitions() -> dict[str, str]:
         else "VARCHAR NOT NULL DEFAULT 'pending'"
     )
     return {
+        "first_name": "TEXT NOT NULL DEFAULT ''",
+        "last_name": "TEXT NOT NULL DEFAULT ''",
+        "job_id": "INTEGER",
         "job_description": "TEXT NOT NULL DEFAULT ''",
+        "cv_summary": "TEXT NOT NULL DEFAULT ''",
         "resume_score": "INTEGER NOT NULL DEFAULT 0",
         "interview_score": "INTEGER NOT NULL DEFAULT 0",
         "skim_insights": json_array_default,
@@ -122,6 +180,31 @@ def _candidate_column_definitions() -> dict[str, str]:
     }
 
 
+def _migrate_leave_statuses() -> None:
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    UPDATE leaverequest
+                    SET status = 'REJECTED'
+                    WHERE status::text = 'DENIED'
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    """
+                    UPDATE leaverequest
+                    SET submitted_at = created_at
+                    WHERE submitted_at IS NULL
+                    """
+                )
+            )
+    except Exception:
+        logger.exception("Database Error: failed to migrate leave request statuses.")
+
+
 def _migrate_user_roles() -> None:
     try:
         with engine.begin() as connection:
@@ -130,7 +213,7 @@ def _migrate_user_roles() -> None:
                     """
                     UPDATE "user"
                     SET role = 'EMPLOYEE'
-                    WHERE role = 'USER' AND employee_id IS NOT NULL
+                    WHERE role::text = 'USER' AND employee_id IS NOT NULL
                     """
                 )
             )
@@ -139,7 +222,7 @@ def _migrate_user_roles() -> None:
                     """
                     UPDATE "user"
                     SET role = 'CANDIDATE'
-                    WHERE role = 'USER' AND candidate_id IS NOT NULL AND employee_id IS NULL
+                    WHERE role::text = 'USER' AND candidate_id IS NOT NULL AND employee_id IS NULL
                     """
                 )
             )

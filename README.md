@@ -10,6 +10,8 @@ The product supports two core workflows:
 
 1. Leave management for employees
 2. Recruitment screening for candidates
+3. Admin dashboard management for HR managers
+4. Employee-only account activation and sign-in for pre-registered staff
 
 ## What Is Implemented
 
@@ -24,6 +26,29 @@ The product supports two core workflows:
 - WebSocket chat endpoint for live conversation updates
 - Mock HRIS sync endpoints for Workday and BambooHR
 - Messaging integration scaffolding for Slack Bolt and Microsoft Teams
+- Dedicated employee auth flow backed by the `employee` table
+- Employee account activation endpoint: `POST /api/auth/employee/signup`
+- Employee login, profile, and logout endpoints:
+  - `POST /api/auth/employee/login`
+  - `GET /api/auth/employee/me`
+  - `POST /api/auth/employee/logout`
+- Cookie-based employee sessions with JWT blacklist-backed logout
+- Employee login lockout after repeated failed attempts
+- Admin dashboard APIs protected by JWT role checks for `ADMIN` users only
+- AI-assisted admin job creation with `POST /api/admin/jobs`
+- Admin job CRUD endpoints:
+  - `GET /api/admin/jobs`
+  - `POST /api/admin/jobs`
+  - `PATCH /api/admin/jobs/{job_id}`
+  - `DELETE /api/admin/jobs/{job_id}`
+- Admin candidate pipeline endpoints:
+  - `GET /api/admin/candidates`
+  - `GET /api/admin/candidates/{candidate_id}`
+- Admin leave management endpoints:
+  - `GET /api/admin/leaves`
+  - `PATCH /api/admin/leaves/{leave_id}`
+  - `GET /api/admin/employees/leave-quota`
+- Public recruitment jobs endpoint for candidates: `GET /api/recruitment/jobs`
 
 ### AI and Workflow Logic
 
@@ -50,6 +75,21 @@ The product supports two core workflows:
 - Recruitment screen connected to live candidate data
 - Resume upload form that posts files to the recruitment endpoint
 - Analytics dashboard connected to backend metrics
+- Protected admin routes:
+  - `/admin/jobs`
+  - `/admin/candidates`
+  - `/admin/leaves`
+- Sidebar-based HR manager dashboard for job, candidate, and leave operations
+- AI-generated job draft modal with editable preview before HR finalization
+- Candidate pipeline table with job filter, recommendation badges, and transcript detail view
+- Leave requests table with approve/reject actions and a quota sub-tab
+- Candidate jobs landing page now backed by live open jobs from the backend
+- Employee auth pages:
+  - `/employee/signup`
+  - `/employee/login`
+  - `/employee/dashboard`
+- Global employee auth context with session rehydration via `/api/auth/employee/me`
+- Employee sessions use httpOnly cookies instead of `localStorage`
 
 ## Project Structure
 
@@ -79,16 +119,22 @@ hrrecruiting-chatbot/
   FastAPI entrypoint, startup lifecycle, router registration, and CORS setup.
 
 - [models.py](/home/unitedsol/hrrecruiting-chatbot/backend/app/models.py)
-  SQLModel database entities for users, employees, candidates, and leave requests.
+  SQLModel database entities for users, employees, jobs, candidates, leave requests, leave quotas, and token blocklist records.
+
+- [auth.py](/home/unitedsol/hrrecruiting-chatbot/backend/app/api/routes/auth.py)
+  General auth plus employee-specific signup, login, profile, logout, rate limiting, and cookie session management.
 
 - [chat.py](/home/unitedsol/hrrecruiting-chatbot/backend/app/api/routes/chat.py)
   WebSocket endpoint used by the live chat UI.
 
 - [recruitment.py](/home/unitedsol/hrrecruiting-chatbot/backend/app/api/routes/recruitment.py)
-  Resume upload and candidate scoring API.
+  Resume upload, candidate scoring API, and public open-jobs listing.
 
 - [leave.py](/home/unitedsol/hrrecruiting-chatbot/backend/app/api/routes/leave.py)
   Leave moderation, balance lookup, and approval endpoints.
+
+- [admin.py](/home/unitedsol/hrrecruiting-chatbot/backend/app/api/routes/admin.py)
+  HR manager dashboard endpoints for jobs, candidates, leave requests, and leave quota visibility.
 
 - [agentic.py](/home/unitedsol/hrrecruiting-chatbot/backend/app/services/agentic.py)
   LangGraph-compatible orchestration wrapper for leave and recruitment workflows.
@@ -100,14 +146,18 @@ Seeded demo users:
 - Admin:
   - email: `admin.hr@talentspark.dev`
   - password: `admin123`
-- Employee:
-  - email: `employee@talentspark.dev`
-  - password: `user123`
 - Candidate:
   - email: `candidate@talentspark.dev`
   - password: `user123`
 
-The frontend uses these automatically for local development.
+Pre-registered employee records for signup testing:
+
+- `raj.patel@talentspark.dev`
+- `sarah.mitchell@talentspark.dev`
+- `tom.anderson@talentspark.dev`
+
+Employees should use `/employee/signup` first, then `/employee/login`.
+Admin and candidate demo entry points are still available for local development.
 
 ## How To Run With Docker
 
@@ -159,8 +209,11 @@ When the backend starts against the `hr_chatbot` database, it creates these core
 
 - `user`
 - `employee`
+- `jobs`
 - `candidate`
 - `leaverequest`
+- `leave_quota`
+- `token_blocklist`
 - `checkpoints`
 - `checkpoint_writes`
 

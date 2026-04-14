@@ -4,6 +4,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from jose import JWTError
 from sqlmodel import Session, select
 
+from backend.app.core.config import settings
 from backend.app.core.database import engine
 from backend.app.core.security import decode_token
 from backend.app.models import User, UserRole
@@ -14,7 +15,7 @@ router = APIRouter(tags=["chat"])
 
 @router.websocket("/ws/chat")
 async def chat_socket(websocket: WebSocket) -> None:
-    token = websocket.query_params.get("token")
+    token = websocket.query_params.get("token") or websocket.cookies.get(settings.employee_auth_cookie_name)
     if not token:
         await websocket.close(code=4401)
         return

@@ -49,11 +49,18 @@ def password_needs_rehash(hashed_password: str) -> bool:
     return pwd_context is not None and not hashed_password.startswith("$2")
 
 
-def create_access_token(subject: str, role: str, expires_delta: timedelta | None = None) -> str:
+def create_access_token(
+    subject: str,
+    role: str,
+    expires_delta: timedelta | None = None,
+    extra_claims: dict[str, Any] | None = None,
+) -> str:
     expire = datetime.now(timezone.utc) + (
         expires_delta or timedelta(minutes=settings.access_token_expire_minutes)
     )
     to_encode: dict[str, Any] = {"sub": subject, "role": role, "exp": expire}
+    if extra_claims:
+        to_encode.update(extra_claims)
     return jwt.encode(to_encode, settings.jwt_secret_key, algorithm=settings.algorithm)
 
 
@@ -73,3 +80,7 @@ def require_token(token: str | None) -> dict[str, Any]:
     if not token:
         raise JWTError("Missing bearer token.")
     return decode_token(token)
+
+
+def hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()

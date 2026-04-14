@@ -12,6 +12,7 @@ from hr_chatbot.recruitment_scorecard import (
 )
 
 from backend.app.models import Candidate, InterviewStatus
+from backend.app.services.admin_dashboard import split_full_name
 from backend.app.services.agentic import run_recruitment_agent, run_recruitment_interviewer
 from backend.app.services.recruitment_skimmer import skim_candidate_profile
 
@@ -116,10 +117,14 @@ def initialize_candidate_interview(
     screening_answers: list[str],
 ) -> dict[str, Any]:
     intake = build_resume_intake(candidate_name, role_title, resume_text, job_description)
+    first_name, last_name = split_full_name(candidate_name)
     candidate.name = candidate_name
+    candidate.first_name = first_name
+    candidate.last_name = last_name
     candidate.role_title = role_title
     candidate.resume_text = resume_text
     candidate.job_description = job_description
+    candidate.cv_summary = str(intake["summary"])
     candidate.resume_score = int(intake["resume_score"])
     candidate.interview_score = 0
     candidate.ai_score = int(intake["resume_score"])
@@ -147,6 +152,7 @@ def initialize_candidate_interview(
             ),
         },
         "summary": candidate.summary,
+        "cv_summary": candidate.cv_summary,
         "skills": candidate.skills,
         "skim_insights": candidate.skim_insights,
     }
@@ -253,6 +259,14 @@ def hydrate_legacy_candidate(candidate: Candidate) -> bool:
         changed = True
     if candidate.skim_insights is None:
         candidate.skim_insights = []
+        changed = True
+    if not candidate.first_name or candidate.last_name is None:
+        first_name, last_name = split_full_name(candidate.name)
+        candidate.first_name = first_name
+        candidate.last_name = last_name
+        changed = True
+    if not candidate.cv_summary and candidate.summary:
+        candidate.cv_summary = candidate.summary
         changed = True
     if candidate.resume_score == 0 and candidate.ai_score > 0:
         candidate.resume_score = candidate.ai_score

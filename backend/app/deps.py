@@ -2,21 +2,38 @@ from __future__ import annotations
 
 from typing import Callable
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Cookie, Depends, Header, HTTPException, status
 from jose import JWTError
 from sqlmodel import Session, select
 
 from backend.app.core.database import get_session
-from backend.app.core.security import read_bearer_token, require_token
-from backend.app.models import User, UserRole
+from backend.app.core.config import settings
+from backend.app.core.security import hash_token, read_bearer_token, require_token
+from backend.app.models import TokenBlocklist, User, UserRole
+
+
+def get_current_token(
+    authorization: str | None = Header(default=None),
+    employee_auth_cookie: str | None = Cookie(default=None, alias=settings.employee_auth_cookie_name),
+) -> str | None:
+    return read_bearer_token(authorization) or employee_auth_cookie
+
+
+def _ensure_token_not_blocked(token: str, session: Session) -> None:
+    token_digest = hash_token(token)
+    blocked = session.exec(select(TokenBlocklist).where(TokenBlocklist.token_hash == token_digest)).first()
+    if blocked is not None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session has expired or been logged out.")
 
 
 def get_current_user(
-    authorization: str | None = Header(default=None),
+    token: str | None = Depends(get_current_token),
     session: Session = Depends(get_session),
 ) -> User:
-    token = read_bearer_token(authorization)
     try:
+        if token is None:
+            raise JWTError("Missing bearer token.")
+        _ensure_token_not_blocked(token, session)
         payload = require_token(token)
         user_id = int(payload["sub"])
     except (JWTError, KeyError, ValueError) as exc:
@@ -35,4 +52,3 @@ def require_roles(*roles: UserRole) -> Callable[[User], User]:
         return current_user
 
     return _dependency
-

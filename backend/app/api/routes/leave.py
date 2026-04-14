@@ -8,7 +8,7 @@ from backend.app.deps import require_roles
 from backend.app.models import Employee, LeaveRequest, LeaveStatus, User, UserRole
 from backend.app.schemas import LeaveBalanceRead, LeaveRequestRead, LeaveRequestStatusUpdate
 from backend.app.services.hris import sync_leave_balance
-from backend.app.services.leave import get_leave_balance_summary, resolve_leave_history_scope
+from backend.app.services.leave import calculate_leave_days, get_leave_balance_summary, resolve_leave_history_scope
 
 router = APIRouter(prefix="/leave", tags=["leave"])
 
@@ -19,14 +19,18 @@ def _to_leave_read(leave_request: LeaveRequest, employee: Employee) -> LeaveRequ
         employee_id=leave_request.employee_id,
         employee_name=employee.name,
         department=employee.department,
+        leave_type=leave_request.leave_type,
         start_date=leave_request.start_date,
         end_date=leave_request.end_date,
+        total_days=calculate_leave_days(leave_request),
         reason=leave_request.reason,
         status=leave_request.status,
+        hr_note=leave_request.hr_note,
         handover_contact=leave_request.handover_contact,
         handover_notes=leave_request.handover_notes,
         urgency_level=leave_request.urgency_level,
         privacy_flagged=leave_request.privacy_flagged,
+        submitted_at=leave_request.submitted_at,
         created_at=leave_request.created_at,
     )
 
@@ -59,6 +63,8 @@ def update_leave_request_status(
     if leave_request is None:
         raise HTTPException(status_code=404, detail="Leave request not found.")
     leave_request.status = payload.status
+    leave_request.hr_note = payload.hr_note.strip()
+    leave_request.total_days = calculate_leave_days(leave_request)
     session.add(leave_request)
     session.commit()
     session.refresh(leave_request)
@@ -77,6 +83,7 @@ def approve_leave_request(
         raise HTTPException(status_code=404, detail="Leave request not found.")
 
     leave_request.status = LeaveStatus.APPROVED
+    leave_request.total_days = calculate_leave_days(leave_request)
     session.add(leave_request)
     session.commit()
     session.refresh(leave_request)

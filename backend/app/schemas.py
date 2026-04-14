@@ -5,7 +5,15 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from backend.app.models import CandidateStatus, InterviewStatus, LeaveStatus, UserRole
+from backend.app.models import (
+    CandidateStatus,
+    EmploymentType,
+    InterviewStatus,
+    JobStatus,
+    LeaveStatus,
+    LeaveType,
+    UserRole,
+)
 
 
 class LoginRequest(BaseModel):
@@ -41,18 +49,64 @@ class UserProfile(BaseModel):
 class EmployeeRead(BaseModel):
     id: int
     name: str
+    full_name: str = ""
+    official_email: str = ""
     department: str
+    designation: str = ""
+    date_of_joining: date
+    is_active: bool = True
     annual_allowance: float
     leave_balance: float
 
     model_config = ConfigDict(from_attributes=True)
 
 
+class EmployeeSignupRequest(BaseModel):
+    full_name: str = Field(min_length=2, max_length=200)
+    email: str
+    password: str
+    confirm_password: str
+
+
+class EmployeeLoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class EmployeeSignupResponse(BaseModel):
+    message: str
+
+
+class EmployeeAuthProfile(BaseModel):
+    employee_id: int
+    full_name: str
+    email: str
+    department: str
+    designation: str
+    date_of_joining: date
+    role: str = "EMPLOYEE"
+    is_active: bool
+
+
+class EmployeeAuthResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    employee: EmployeeAuthProfile
+
+
+class EmployeeLogoutResponse(BaseModel):
+    message: str
+
+
 class CandidateRead(BaseModel):
     id: int
+    first_name: str = ""
+    last_name: str = ""
     name: str
     email: str
+    job_id: Optional[int] = None
     role_title: str
+    cv_summary: str = ""
     ai_score: int
     resume_score: int
     interview_score: int
@@ -78,8 +132,9 @@ class CandidateScoreResponse(BaseModel):
 
 
 class CandidateApplicationRequest(BaseModel):
-    role_title: str
-    job_description: str
+    job_id: Optional[int] = None
+    role_title: Optional[str] = None
+    job_description: Optional[str] = None
 
 
 class CandidateApplicationStatusResponse(BaseModel):
@@ -109,19 +164,126 @@ class LeaveRequestRead(BaseModel):
     employee_id: int
     employee_name: str
     department: str
+    leave_type: LeaveType
     start_date: date
     end_date: date
+    total_days: int
     reason: str
     status: LeaveStatus
+    hr_note: str
     handover_contact: str
     handover_notes: str
     urgency_level: str
     privacy_flagged: bool
+    submitted_at: datetime
     created_at: datetime
 
 
 class LeaveRequestStatusUpdate(BaseModel):
     status: LeaveStatus
+    hr_note: str = ""
+
+
+class AdminJobCreateRequest(BaseModel):
+    title: str = Field(min_length=2, max_length=200)
+
+
+class AdminJobUpdateRequest(BaseModel):
+    title: Optional[str] = Field(default=None, min_length=2, max_length=200)
+    description: Optional[str] = None
+    required_skills: Optional[list[str]] = None
+    experience_years: Optional[int] = Field(default=None, ge=0, le=40)
+    employment_type: Optional[EmploymentType] = None
+    salary_range: Optional[str] = None
+    responsibilities: Optional[list[str]] = None
+    nice_to_have_qualifications: Optional[list[str]] = None
+    status: Optional[JobStatus] = None
+
+
+class JobRead(BaseModel):
+    job_id: int
+    title: str
+    description: str
+    required_skills: list[str]
+    experience_years: int
+    employment_type: EmploymentType
+    salary_range: Optional[str] = None
+    responsibilities: list[str]
+    nice_to_have_qualifications: list[str]
+    status: JobStatus
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PublicJobRead(BaseModel):
+    job_id: int
+    title: str
+    description: str
+    required_skills: list[str]
+    experience_years: int
+    employment_type: EmploymentType
+    salary_range: Optional[str] = None
+    responsibilities: list[str]
+    nice_to_have_qualifications: list[str]
+    status: JobStatus
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CandidateScoreBreakdown(BaseModel):
+    question: str
+    answer: str
+    score: int
+    justification: str
+    source: str
+
+
+class AdminCandidateRead(BaseModel):
+    candidate_id: int
+    first_name: str
+    last_name: str
+    email: str
+    job_id: Optional[int] = None
+    job_position: str
+    cv_summary: str
+    screening_score: int
+    recommendation_label: str
+    interview_transcript: list[dict[str, Any]]
+    score_breakdown: list[CandidateScoreBreakdown]
+    applied_at: datetime
+
+
+class AdminLeaveRead(BaseModel):
+    leave_id: int
+    employee_id: int
+    employee_name: str
+    leave_type: LeaveType
+    start_date: date
+    end_date: date
+    total_days: int
+    reason: str
+    status: LeaveStatus
+    hr_note: str
+    submitted_at: datetime
+
+
+class LeaveQuotaRead(BaseModel):
+    employee_id: int
+    employee_name: str
+    year: int
+    annual_total: int
+    annual_used: int
+    annual_remaining: int
+    sick_total: int
+    sick_used: int
+    sick_remaining: int
+    casual_total: int
+    casual_used: int
+    casual_remaining: int
+    unpaid_used: int
 
 
 class LeaveBalanceRead(BaseModel):
@@ -145,7 +307,7 @@ class AdminUserRead(BaseModel):
 
 class PromoteCandidateRequest(BaseModel):
     department: str = "Operations"
-    annual_allowance: float = 18
+    annual_allowance: float = 20
 
 
 class MetricCard(BaseModel):
