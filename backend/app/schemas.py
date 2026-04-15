@@ -533,3 +533,88 @@ class ChatSocketOutbound(BaseModel):
     privacy_note: Optional[str] = None
     structured_report: Optional[dict[str, Any]] = None
     timestamp: datetime = Field(default_factory=datetime.utcnow)
+
+
+class CandidateAsyncJobResponse(BaseModel):
+    async_job_id: str
+    status: str
+
+
+class CandidateAsyncJobStatusResponse(BaseModel):
+    async_job_id: str
+    status: str
+    candidate_id: Optional[int] = None
+    result: dict[str, Any] = Field(default_factory=dict)
+    error_message: str = ""
+
+
+class CandidateStatusLinkRequest(BaseModel):
+    email: str
+
+
+class CandidateStatusLinkResponse(BaseModel):
+    access_token: str
+    expires_at: datetime
+
+
+class CandidatePortalStatusResponse(BaseModel):
+    candidate_id: int
+    full_name: str
+    email: str
+    job_title: str
+    status: CandidateStatus
+    interview_status: InterviewStatus
+    interview_date: Optional[date] = None
+    recommendation_label: str = ""
+    updated_at: datetime
+
+
+class CandidateTalentPoolItem(BaseModel):
+    candidate_id: int
+    full_name: str
+    email: str
+    skills: list[str]
+    recommendation_label: str
+    score: int
+    status: CandidateStatus
+
+
+class CandidateTalentPoolResponse(BaseModel):
+    items: list[CandidateTalentPoolItem]
+
+
+class ManagerLeaveReviewRequest(BaseModel):
+    status: Literal["approved", "rejected"]
+    note: str = ""
+
+
+class InterviewSlotRead(BaseModel):
+    start_at: datetime
+    end_at: datetime
+    timezone: str
+
+
+class InterviewSlotResponse(BaseModel):
+    candidate_id: int
+    job_title: str
+    slots: list[InterviewSlotRead]
+
+
+class PolicyAssistantRequest(BaseModel):
+    question: str = Field(min_length=3, max_length=800)
+
+
+class PolicyAssistantResponse(BaseModel):
+    answer: str
+    sources: list[str]
+
+
+class AuditEventRead(BaseModel):
+    id: int
+    actor_type: str
+    actor_id: Optional[str] = None
+    event_type: str
+    entity_type: str
+    entity_id: str
+    details: dict[str, Any]
+    created_at: datetime

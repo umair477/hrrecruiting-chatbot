@@ -18,6 +18,7 @@ class UserRole(str, Enum):
 
 class EmployeeRole(str, Enum):
     ADMIN = "admin"
+    MANAGER = "manager"
     EMPLOYEE = "employee"
 
 
@@ -280,3 +281,50 @@ class Notification(SQLModel, table=True):
     sent_to_email: str = Field(default="")
     sent_at: datetime = Field(default_factory=datetime.utcnow)
     status: str = Field(default="sent")
+
+
+class AuditEvent(SQLModel, table=True):
+    __tablename__ = "audit_events"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    actor_type: str = Field(default="system", index=True)
+    actor_id: Optional[str] = Field(default=None, index=True)
+    event_type: str = Field(index=True)
+    entity_type: str = Field(index=True)
+    entity_id: str = Field(index=True)
+    details: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+
+class CandidateAsyncJob(SQLModel, table=True):
+    __tablename__ = "candidate_async_jobs"
+
+    job_id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
+    job_type: str = Field(default="candidate_cv_upload", index=True)
+    status: str = Field(default="queued", index=True)
+    candidate_id: Optional[int] = Field(default=None, foreign_key="candidate.id", index=True)
+    payload: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+    result: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+    error_message: str = Field(default="")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class IdempotencyRecord(SQLModel, table=True):
+    __tablename__ = "idempotency_records"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    idempotency_key: str = Field(index=True, unique=True)
+    endpoint: str = Field(index=True)
+    request_hash: str = Field(index=True)
+    response_payload: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class CandidatePortalToken(SQLModel, table=True):
+    __tablename__ = "candidate_portal_tokens"
+
+    token: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
+    candidate_id: int = Field(foreign_key="candidate.id", index=True)
+    expires_at: datetime = Field(index=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow)

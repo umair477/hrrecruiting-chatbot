@@ -1,12 +1,16 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from datetime import datetime
+
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Header, HTTPException, UploadFile, status
 from sqlmodel import Session, select
 
-from backend.app.core.database import get_session
-from backend.app.models import Job, JobStatus
+from backend.app.core.database import engine, get_session
+from backend.app.models import CandidateAsyncJob, Job, JobStatus
 from backend.app.schemas import (
     CandidateCVUploadResponse,
+    CandidateAsyncJobResponse,
+    CandidateAsyncJobStatusResponse,
     CandidatePublicApplyRequest,
     CandidatePublicApplyResponse,
     CandidatePublicChatRequest,
@@ -24,9 +28,59 @@ from backend.app.services.candidate_public import (
     start_candidate_application_session,
     upsert_candidate_cv,
 )
+from backend.app.services.idempotency import fetch_record, payload_hash, save_record
 
 
 router = APIRouter(tags=["public-candidate"])
+
+
+def _process_cv_upload_job(async_job_id: str) -> None:
+    with Session(engine) as background_session:
+        async_job = background_session.exec(
+            select(CandidateAsyncJob).where(CandidateAsyncJob.job_id == async_job_id)
+        ).first()
+        if async_job is None:
+            return
+
+        try:
+            async_job.status = "processing"
+            async_job.updated_at = datetime.utcnow()
+            background_session.add(async_job)
+            background_session.commit()
+
+            payload = async_job.payload
+            raw_bytes = bytes.fromhex(str(payload.get("file_hex", "")))
+            cv_text = extract_cv_text(filename=str(payload.get("filename", "")), raw_bytes=raw_bytes)
+            extracted_summary = extract_cv_summary_with_llm(
+                first_name=str(payload.get("first_name", "")),
+                last_name=str(payload.get("last_name", "")),
+                email=str(payload.get("email", "")),
+                cv_text=cv_text,
+            )
+            candidate = upsert_candidate_cv(
+                session=background_session,
+                first_name=str(payload.get("first_name", "")),
+                last_name=str(payload.get("last_name", "")),
+                email=str(payload.get("email", "")),
+                cv_text=cv_text,
+                cv_summary_json=extracted_summary,
+            )
+            async_job.status = "completed"
+            async_job.candidate_id = candidate.id
+            async_job.result = {
+                "candidate_id": int(candidate.id),
+                "email": str(payload.get("email", "")),
+                "top_skills": extracted_summary.get("skills", []),
+            }
+            async_job.updated_at = datetime.utcnow()
+            background_session.add(async_job)
+            background_session.commit()
+        except Exception as exc:
+            async_job.status = "failed"
+            async_job.error_message = str(exc)
+            async_job.updated_at = datetime.utcnow()
+            background_session.add(async_job)
+            background_session.commit()
 
 
 @router.get("/jobs/public", response_model=list[PublicJobListingRead])
@@ -44,7 +98,7 @@ def upload_candidate_cv(
     email: str = Form(...),
     file: UploadFile = File(...),
     session: Session = Depends(get_session),
-) -> CandidateCVUploadResponse:
+    ) -> CandidateCVUploadResponse:
     normalized_email = email.strip().lower()
     if not is_valid_email(normalized_email):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid email address.")
@@ -92,12 +146,72 @@ def upload_candidate_cv(
     )
 
 
+@router.post("/candidates/upload-cv/async", response_model=CandidateAsyncJobResponse)
+def upload_candidate_cv_async(
+    background_tasks: BackgroundTasks,
+    first_name: str = Form(...),
+    last_name: str = Form(...),
+    email: str = Form(...),
+    file: UploadFile = File(...),
+    session: Session = Depends(get_session),
+) -> CandidateAsyncJobResponse:
+    normalized_email = email.strip().lower()
+    if not is_valid_email(normalized_email):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid email address.")
+
+    raw_bytes = file.file.read()
+    async_job = CandidateAsyncJob(
+        status="queued",
+        payload={
+            "first_name": first_name.strip(),
+            "last_name": last_name.strip(),
+            "email": normalized_email,
+            "filename": file.filename or "",
+            "file_hex": raw_bytes.hex(),
+        },
+    )
+    session.add(async_job)
+    session.commit()
+    session.refresh(async_job)
+    background_tasks.add_task(_process_cv_upload_job, async_job.job_id)
+    return CandidateAsyncJobResponse(async_job_id=async_job.job_id, status=async_job.status)
+
+
+@router.get("/candidates/jobs/{async_job_id}", response_model=CandidateAsyncJobStatusResponse)
+def get_candidate_async_job(async_job_id: str, session: Session = Depends(get_session)) -> CandidateAsyncJobStatusResponse:
+    async_job = session.exec(select(CandidateAsyncJob).where(CandidateAsyncJob.job_id == async_job_id)).first()
+    if async_job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Async job not found.")
+    return CandidateAsyncJobStatusResponse(
+        async_job_id=async_job.job_id,
+        status=async_job.status,
+        candidate_id=async_job.candidate_id,
+        result=async_job.result,
+        error_message=async_job.error_message,
+    )
+
+
 @router.post("/candidates/apply/{job_id}", response_model=CandidatePublicApplyResponse)
 def start_candidate_application(
     job_id: int,
     payload: CandidatePublicApplyRequest,
+    idempotency_key: str | None = Header(default=None, alias="X-Idempotency-Key"),
     session: Session = Depends(get_session),
 ) -> CandidatePublicApplyResponse:
+    request_payload = {
+        "job_id": job_id,
+        "first_name": payload.first_name,
+        "last_name": payload.last_name,
+        "email": payload.email.strip().lower(),
+    }
+    if idempotency_key:
+        request_digest = payload_hash(request_payload)
+        existing = fetch_record(session=session, idempotency_key=idempotency_key)
+        if existing:
+            if existing.request_hash != request_digest:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Idempotency key reuse with different payload.")
+            return CandidatePublicApplyResponse.model_validate(existing.response_payload)
+
     try:
         candidate_session = start_candidate_application_session(
             session=session,
@@ -110,7 +224,7 @@ def start_candidate_application(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     first_question = candidate_session.questions[0]["question_text"]
-    return CandidatePublicApplyResponse(
+    response_payload = CandidatePublicApplyResponse(
         session_id=candidate_session.session_id,
         candidate_id=candidate_session.candidate_id,
         reply=(
@@ -120,6 +234,15 @@ def start_candidate_application(
         question_number=1,
         total_questions=len(candidate_session.questions),
     )
+    if idempotency_key:
+        save_record(
+            session=session,
+            idempotency_key=idempotency_key,
+            endpoint="POST /api/candidates/apply/{job_id}",
+            request_hash=payload_hash(request_payload),
+            response_payload=response_payload.model_dump(),
+        )
+    return response_payload
 
 
 @router.post("/chat/candidate", response_model=CandidatePublicChatResponse)
@@ -148,14 +271,33 @@ def candidate_chat(
 @router.post("/candidates/submit", response_model=CandidatePublicSubmitResponse)
 def submit_candidate_application(
     payload: CandidatePublicSubmitRequest,
+    idempotency_key: str | None = Header(default=None, alias="X-Idempotency-Key"),
     session: Session = Depends(get_session),
 ) -> CandidatePublicSubmitResponse:
+    request_payload = {"session_id": payload.session_id}
+    if idempotency_key:
+        request_digest = payload_hash(request_payload)
+        existing = fetch_record(session=session, idempotency_key=idempotency_key)
+        if existing:
+            if existing.request_hash != request_digest:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Idempotency key reuse with different payload.")
+            return CandidatePublicSubmitResponse.model_validate(existing.response_payload)
+
     try:
         result = finalize_candidate_application(session=session, session_id=payload.session_id)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
-    return CandidatePublicSubmitResponse(
+    response_payload = CandidatePublicSubmitResponse(
         reply=str(result["reply"]),
         submitted=bool(result["submitted"]),
     )
+    if idempotency_key:
+        save_record(
+            session=session,
+            idempotency_key=idempotency_key,
+            endpoint="POST /api/candidates/submit",
+            request_hash=payload_hash(request_payload),
+            response_payload=response_payload.model_dump(),
+        )
+    return response_payload

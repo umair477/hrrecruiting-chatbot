@@ -62,6 +62,14 @@ def _ensure_employees(session: Session) -> dict[str, Employee]:
             "date_of_joining": date(2023, 11, 20),
             "role": EmployeeRole.EMPLOYEE,
         },
+        {
+            "name": "Maya Thompson",
+            "official_email": "maya.thompson@talentspark.dev",
+            "department": "Engineering",
+            "designation": "Engineering Manager",
+            "date_of_joining": date(2022, 9, 14),
+            "role": EmployeeRole.MANAGER,
+        },
     ]
     employees_by_name: dict[str, Employee] = {}
     for payload in seed_employees:
@@ -91,7 +99,7 @@ def _ensure_employees(session: Session) -> dict[str, Employee]:
             if employee.date_of_joining is None:
                 employee.date_of_joining = payload["date_of_joining"]
             employee.is_active = True
-            if employee.role not in {EmployeeRole.ADMIN, EmployeeRole.EMPLOYEE}:
+            if employee.role not in {EmployeeRole.ADMIN, EmployeeRole.MANAGER, EmployeeRole.EMPLOYEE}:
                 employee.role = payload["role"]
             if employee.annual_allowance <= 0:
                 employee.annual_allowance = 20

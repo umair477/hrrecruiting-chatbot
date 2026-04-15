@@ -610,6 +610,17 @@ def _migrate_employee_roles() -> None:
                     """
                 )
             )
+            connection.execute(
+                text(
+                    """
+                    UPDATE employee
+                    SET role = 'manager'
+                    WHERE """
+                    + role_text
+                    + """ IN ('MANAGER', 'manager')
+                    """
+                )
+            )
     except Exception:
         logger.exception("Database Error: failed to migrate employee role labels.")
 
