@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from backend.app.models import (
     CandidateStatus,
+    EmployeeRole,
     EmploymentType,
     InterviewStatus,
     JobStatus,
@@ -33,6 +34,14 @@ class TokenResponse(BaseModel):
     role: UserRole
     user_id: int
     full_name: str
+
+
+class UnifiedLoginResponse(BaseModel):
+    access_token: str
+    token_type: str = "Bearer"
+    role: Literal["admin", "employee", "candidate"]
+    full_name: str
+    employee_id: Optional[int] = None
 
 
 class UserProfile(BaseModel):
@@ -96,6 +105,51 @@ class EmployeeAuthResponse(BaseModel):
 
 class EmployeeLogoutResponse(BaseModel):
     message: str
+
+
+class LeaveChatHistoryItem(BaseModel):
+    role: str
+    content: str
+
+
+class LeaveChatRequest(BaseModel):
+    message: str = Field(min_length=1)
+    conversation_history: list[LeaveChatHistoryItem] = Field(default_factory=list)
+
+
+class LeaveChatResponse(BaseModel):
+    reply: str
+    conversation_history: list[LeaveChatHistoryItem]
+
+
+class EmployeeLeaveCreateRequest(BaseModel):
+    leave_type: LeaveType
+    start_date: date
+    end_date: date
+    total_days: Optional[int] = None
+    reason: str = Field(min_length=3, max_length=1000)
+
+
+class EmployeeLeaveRead(BaseModel):
+    leave_id: int
+    leave_type: LeaveType
+    start_date: date
+    end_date: date
+    total_days: int
+    reason: str
+    status: LeaveStatus
+    hr_note: str
+    submitted_at: datetime
+
+
+class EmployeeLeaveQuotaRead(BaseModel):
+    annual_total: int
+    annual_remaining: int
+    sick_total: int
+    sick_remaining: int
+    casual_total: int
+    casual_remaining: int
+    unpaid_used: int
 
 
 class CandidateRead(BaseModel):
@@ -184,6 +238,49 @@ class LeaveRequestStatusUpdate(BaseModel):
     hr_note: str = ""
 
 
+class AdminEmployeeCreateRequest(BaseModel):
+    full_name: str = Field(min_length=2, max_length=200)
+    official_email: str
+    department: str = Field(min_length=2, max_length=120)
+    designation: str = Field(min_length=2, max_length=120)
+    date_of_joining: date
+    role: EmployeeRole = EmployeeRole.EMPLOYEE
+
+
+class AdminEmployeeUpdateRequest(BaseModel):
+    department: Optional[str] = Field(default=None, min_length=2, max_length=120)
+    designation: Optional[str] = Field(default=None, min_length=2, max_length=120)
+    role: Optional[EmployeeRole] = None
+    is_active: Optional[bool] = None
+
+
+class AdminEmployeeRead(BaseModel):
+    employee_id: int
+    full_name: str
+    official_email: str
+    department: str
+    designation: str
+    date_of_joining: date
+    role: EmployeeRole
+    is_active: bool
+    password_set: bool
+    annual_total: int
+    annual_used: int
+    annual_remaining: int
+    sick_total: int
+    sick_used: int
+    sick_remaining: int
+    casual_total: int
+    casual_used: int
+    casual_remaining: int
+    unpaid_used: int
+
+
+class AdminEmployeeCreateResponse(BaseModel):
+    message: str
+    employee_id: int
+
+
 class AdminJobCreateRequest(BaseModel):
     title: str = Field(min_length=2, max_length=200)
 
@@ -233,6 +330,63 @@ class PublicJobRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class PublicJobListingRead(BaseModel):
+    job_id: int
+    title: str
+    employment_type: EmploymentType
+    experience_years: int
+    description: str
+    responsibilities: list[str]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CandidatePublicApplyRequest(BaseModel):
+    first_name: str = Field(min_length=1, max_length=100)
+    last_name: str = Field(min_length=1, max_length=100)
+    email: str
+
+
+class CandidateCVUploadResponse(BaseModel):
+    candidate_id: int
+    full_name: str
+    email: str
+    total_years_experience: float
+    top_skills: list[str]
+    extracted_summary: dict[str, Any]
+    reply: str
+
+
+class CandidatePublicApplyResponse(BaseModel):
+    session_id: str
+    candidate_id: int
+    reply: str
+    question_number: int
+    total_questions: int = 6
+
+
+class CandidatePublicChatRequest(BaseModel):
+    session_id: str
+    message: str = Field(min_length=1)
+
+
+class CandidatePublicChatResponse(BaseModel):
+    reply: str
+    question_number: int
+    total_questions: int
+    requires_elaboration: bool = False
+    ready_for_submission: bool = False
+
+
+class CandidatePublicSubmitRequest(BaseModel):
+    session_id: str
+
+
+class CandidatePublicSubmitResponse(BaseModel):
+    reply: str
+    submitted: bool = True
+
+
 class CandidateScoreBreakdown(BaseModel):
     question: str
     answer: str
@@ -251,9 +405,33 @@ class AdminCandidateRead(BaseModel):
     cv_summary: str
     screening_score: int
     recommendation_label: str
+    interview_email_sent: bool
+    interview_date: Optional[date] = None
+    interview_email_sent_at: Optional[datetime] = None
     interview_transcript: list[dict[str, Any]]
     score_breakdown: list[CandidateScoreBreakdown]
     applied_at: datetime
+
+
+class InterviewEmailGenerateRequest(BaseModel):
+    interview_date: date
+    interview_time: str
+    interview_format: str
+    location_or_link: str
+    additional_notes: str = ""
+
+
+class InterviewEmailDraftResponse(BaseModel):
+    to_email: str
+    subject: str
+    body: str
+
+
+class InterviewEmailSendRequest(BaseModel):
+    to_email: str
+    subject: str
+    body: str
+    interview_date: Optional[date] = None
 
 
 class AdminLeaveRead(BaseModel):
@@ -267,6 +445,7 @@ class AdminLeaveRead(BaseModel):
     reason: str
     status: LeaveStatus
     hr_note: str
+    email_sent_at: Optional[datetime] = None
     submitted_at: datetime
 
 

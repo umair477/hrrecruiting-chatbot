@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 import re
+from threading import Lock
+from typing import Literal, cast
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from jose import JWTError
 from sqlmodel import Session, select
 
@@ -18,7 +20,7 @@ from backend.app.core.security import (
     verify_password,
 )
 from backend.app.deps import get_current_token, get_current_user, require_roles
-from backend.app.models import Employee, TokenBlocklist, User, UserRole
+from backend.app.models import Employee, EmployeeRole, TokenBlocklist, User, UserRole
 from backend.app.schemas import (
     AdminUserRead,
     EmployeeAuthProfile,
@@ -31,12 +33,17 @@ from backend.app.schemas import (
     PromoteCandidateRequest,
     SignupRequest,
     TokenResponse,
+    UnifiedLoginResponse,
     UserProfile,
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 PASSWORD_STRENGTH_PATTERN = re.compile(r"^(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$")
+LOGIN_RATE_LIMIT_MAX_ATTEMPTS = 5
+LOGIN_RATE_LIMIT_WINDOW = timedelta(minutes=15)
+_login_attempts_by_ip: dict[str, list[datetime]] = {}
+_login_attempts_lock = Lock()
 
 
 def _normalize_email(email: str) -> str:
@@ -67,6 +74,7 @@ def _clear_employee_auth_cookie(response: Response) -> None:
 
 
 def _employee_profile(employee: Employee) -> EmployeeAuthProfile:
+    profile_role = "ADMIN" if employee.role == EmployeeRole.ADMIN else "EMPLOYEE"
     return EmployeeAuthProfile(
         employee_id=int(employee.id),
         full_name=employee.full_name or employee.name,
@@ -74,7 +82,7 @@ def _employee_profile(employee: Employee) -> EmployeeAuthProfile:
         department=employee.department,
         designation=employee.designation,
         date_of_joining=employee.date_of_joining,
-        role="EMPLOYEE",
+        role=profile_role,
         is_active=employee.is_active,
     )
 
@@ -97,6 +105,7 @@ def _get_employee_by_email(session: Session, email: str) -> Employee | None:
 
 
 def _ensure_employee_user(session: Session, employee: Employee) -> User:
+    target_role = UserRole.ADMIN if employee.role == EmployeeRole.ADMIN else UserRole.EMPLOYEE
     email = _normalize_email(employee.official_email)
     user = session.exec(select(User).where(User.email == email)).first()
     if user is None:
@@ -104,17 +113,17 @@ def _ensure_employee_user(session: Session, employee: Employee) -> User:
             email=email,
             full_name=employee.full_name or employee.name,
             hashed_password=employee.password_hash or "",
-            role=UserRole.EMPLOYEE,
+            role=target_role,
             employee_id=employee.id,
         )
-    elif user.role != UserRole.EMPLOYEE and user.employee_id != employee.id:
+    elif user.employee_id is not None and user.employee_id != employee.id:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="This email is already linked to a different account.",
         )
     else:
         user.full_name = employee.full_name or employee.name
-        user.role = UserRole.EMPLOYEE
+        user.role = target_role
         user.employee_id = employee.id
         if employee.password_hash:
             user.hashed_password = employee.password_hash
@@ -155,10 +164,95 @@ def _ensure_employee_can_authenticate(employee: Employee) -> None:
         )
 
 
-@router.post("/login", response_model=TokenResponse)
-def login(payload: LoginRequest, session: Session = Depends(get_session)) -> TokenResponse:
-    user = session.exec(select(User).where(User.email == _normalize_email(payload.email))).first()
+def _prune_login_attempts(ip_address: str, *, now: datetime) -> list[datetime]:
+    attempts = _login_attempts_by_ip.get(ip_address, [])
+    recent_attempts = [attempt for attempt in attempts if now - attempt < LOGIN_RATE_LIMIT_WINDOW]
+    _login_attempts_by_ip[ip_address] = recent_attempts
+    return recent_attempts
+
+
+def _enforce_login_rate_limit(ip_address: str) -> None:
+    now = datetime.now(timezone.utc)
+    with _login_attempts_lock:
+        attempts = _prune_login_attempts(ip_address, now=now)
+        if len(attempts) >= LOGIN_RATE_LIMIT_MAX_ATTEMPTS:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Too many login attempts. Please try again in 15 minutes.",
+            )
+
+
+def _record_login_failure(ip_address: str) -> None:
+    now = datetime.now(timezone.utc)
+    with _login_attempts_lock:
+        attempts = _prune_login_attempts(ip_address, now=now)
+        attempts.append(now)
+        _login_attempts_by_ip[ip_address] = attempts
+
+
+def _clear_login_failures(ip_address: str) -> None:
+    with _login_attempts_lock:
+        _login_attempts_by_ip.pop(ip_address, None)
+
+
+def _ip_address_for_request(request: Request) -> str:
+    forwarded_for = request.headers.get("x-forwarded-for", "").strip()
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip() or "unknown"
+    if request.client and request.client.host:
+        return request.client.host
+    return "unknown"
+
+
+@router.post("/login", response_model=UnifiedLoginResponse)
+def login(
+    payload: LoginRequest,
+    request: Request,
+    session: Session = Depends(get_session),
+) -> UnifiedLoginResponse:
+    ip_address = _ip_address_for_request(request)
+    _enforce_login_rate_limit(ip_address)
+
+    normalized_email = _normalize_email(payload.email)
+    employee = _get_employee_by_email(session, normalized_email)
+    if employee is not None:
+        _ensure_employee_can_authenticate(employee)
+        if not employee.password_hash or not verify_password(payload.password, employee.password_hash):
+            _record_failed_login(session, employee)
+            _record_login_failure(ip_address)
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password.")
+
+        if password_needs_rehash(employee.password_hash):
+            employee.password_hash = hash_password(payload.password)
+            session.add(employee)
+            session.commit()
+            session.refresh(employee)
+
+        user = _ensure_employee_user(session, employee)
+        _reset_login_attempts(session, employee)
+        role = "admin" if employee.role == EmployeeRole.ADMIN else "employee"
+        access_token = create_access_token(
+            subject=str(user.id),
+            role=role,
+            expires_delta=timedelta(minutes=settings.access_token_expire_minutes),
+            extra_claims={
+                "employee_id": employee.id,
+                "full_name": employee.full_name or employee.name,
+                "email": employee.official_email,
+            },
+        )
+        _clear_login_failures(ip_address)
+        return UnifiedLoginResponse(
+            access_token=access_token,
+            token_type="Bearer",
+            role=role,
+            full_name=employee.full_name or employee.name,
+            employee_id=employee.id,
+        )
+
+    user = session.exec(select(User).where(User.email == normalized_email)).first()
     if user is None or not verify_password(payload.password, user.hashed_password):
+        _record_login_failure(ip_address)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password.")
     if password_needs_rehash(user.hashed_password):
         user.hashed_password = hash_password(payload.password)
@@ -166,16 +260,29 @@ def login(payload: LoginRequest, session: Session = Depends(get_session)) -> Tok
         session.commit()
         session.refresh(user)
 
+    role = user.role.value.lower()
+    if role not in {"admin", "employee", "candidate"}:
+        _record_login_failure(ip_address)
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied. Please contact your administrator.")
+    normalized_role = cast(Literal["admin", "employee", "candidate"], role)
+
     access_token = create_access_token(
         subject=str(user.id),
-        role=user.role.value,
+        role=normalized_role,
         expires_delta=timedelta(minutes=settings.access_token_expire_minutes),
+        extra_claims={
+            "employee_id": user.employee_id,
+            "full_name": user.full_name,
+            "email": user.email,
+        },
     )
-    return TokenResponse(
+    _clear_login_failures(ip_address)
+    return UnifiedLoginResponse(
         access_token=access_token,
-        role=user.role,
-        user_id=user.id,
+        token_type="Bearer",
+        role=normalized_role,
         full_name=user.full_name,
+        employee_id=user.employee_id,
     )
 
 
@@ -259,6 +366,11 @@ def employee_login(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password.")
 
     _ensure_employee_can_authenticate(employee)
+    if employee.role == EmployeeRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin accounts must use the unified sign-in flow.",
+        )
     if not employee.password_hash or not verify_password(payload.password, employee.password_hash):
         _record_failed_login(session, employee)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password.")

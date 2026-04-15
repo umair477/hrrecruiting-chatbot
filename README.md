@@ -12,6 +12,7 @@ The product supports two core workflows:
 2. Recruitment screening for candidates
 3. Admin dashboard management for HR managers
 4. Employee-only account activation and sign-in for pre-registered staff
+5. Public job discovery and chatbot-driven candidate applications (no login required)
 
 ## What Is Implemented
 
@@ -22,8 +23,16 @@ The product supports two core workflows:
 - PostgreSQL-ready configuration
 - Docker Compose for API + Postgres
 - JWT authentication with `ADMIN`, `EMPLOYEE`, and `CANDIDATE` roles
+- Unified role-aware sign-in endpoint: `POST /api/auth/login`
 - CORS enabled for `http://localhost:3000` and `http://localhost:5173`
 - WebSocket chat endpoint for live conversation updates
+- AI-powered employee leave chat endpoint: `POST /api/chat/leave`
+- Public candidate application endpoints (no auth required):
+  - `GET /api/jobs/public`
+  - `POST /api/candidates/upload-cv`
+  - `POST /api/candidates/apply/{job_id}`
+  - `POST /api/chat/candidate`
+  - `POST /api/candidates/submit`
 - Mock HRIS sync endpoints for Workday and BambooHR
 - Messaging integration scaffolding for Slack Bolt and Microsoft Teams
 - Dedicated employee auth flow backed by the `employee` table
@@ -34,6 +43,12 @@ The product supports two core workflows:
   - `POST /api/auth/employee/logout`
 - Cookie-based employee sessions with JWT blacklist-backed logout
 - Employee login lockout after repeated failed attempts
+- Employee portal leave APIs:
+  - `POST /api/leaves`
+  - `GET /api/leaves/my`
+  - `GET /api/leaves/quota/my`
+- CV parsing supports `.pdf` and `.docx` uploads with 5MB limit
+- Candidate CV extraction stores both raw CV text and structured JSON summary
 - Admin dashboard APIs protected by JWT role checks for `ADMIN` users only
 - AI-assisted admin job creation with `POST /api/admin/jobs`
 - Admin job CRUD endpoints:
@@ -44,21 +59,29 @@ The product supports two core workflows:
 - Admin candidate pipeline endpoints:
   - `GET /api/admin/candidates`
   - `GET /api/admin/candidates/{candidate_id}`
+  - `POST /api/admin/candidates/{candidate_id}/generate-interview-email`
+  - `POST /api/admin/candidates/{candidate_id}/send-interview-email`
 - Admin leave management endpoints:
   - `GET /api/admin/leaves`
   - `PATCH /api/admin/leaves/{leave_id}`
   - `GET /api/admin/employees/leave-quota`
+- Admin employee management endpoints:
+  - `POST /api/admin/employees`
+  - `GET /api/admin/employees`
+  - `GET /api/admin/employees/{employee_id}`
+  - `PATCH /api/admin/employees/{employee_id}`
+  - `DELETE /api/admin/employees/{employee_id}` (soft delete)
+- Centralized email delivery service with notification audit logs (`notifications` table)
 - Public recruitment jobs endpoint for candidates: `GET /api/recruitment/jobs`
 
 ### AI and Workflow Logic
 
-- Leave slot-filling workflow with:
-  - date collection
-  - reason capture
-  - handover capture
-  - urgency capture
-  - privacy filtering for sensitive medical details
-  - structured HR report generation
+- Employee leave chat assistant powered by OpenAI Responses API:
+  - Injects employee profile, leave quota, and pending/approved leave history into every AI turn
+  - Handles natural-language leave conversations and clarification prompts
+  - Parses structured submission blocks from AI replies for final backend validation
+  - Performs final overlap/quota checks before persistence
+  - Creates pending leave requests and tentatively deducts quota on successful submission
 - Recruitment scoring workflow with:
   - resume text parsing
   - OpenAI-backed or heuristic CV skim analysis against the job description
@@ -66,28 +89,44 @@ The product supports two core workflows:
   - dynamic interview question generation tailored to the CV and role
   - candidate scorecard generation
   - per-answer interview grading layered on top of the skim-generated questions
+- Public candidate chatbot workflow:
+  - sequential collection of first name, last name, email, and CV upload
+  - AI-powered CV summary extraction
+  - AI-generated 6-question structured screening interview (technical, experience, behavioral, motivation)
+  - one follow-up prompt for short/vague answers
+  - final AI scoring and recommendation persisted to candidate records
 - LangGraph-compatible workflow wrappers with deterministic fallback behavior
 
 ### Frontend
 
-- Chat screen connected to the backend over WebSockets
+- Employee portal with dedicated top navbar (`Logo | Chat Assistant | My Leaves | Logout`)
+- Employee leave chat page: `/employee/chat`
+- Employee leave history + quota page: `/employee/leaves`
+- Employee pages are protected and redirect to `/employee/login` for missing/expired session
+- Public landing page: `/`
+- Public landing navbar now includes modal-based unified Sign-In with role redirects:
+  - `admin` -> `/admin/dashboard`
+  - `employee` -> `/employee/chat`
+- Public candidate application chat page: `/apply/{job_id}`
 - Leave management screen connected to live FastAPI data
 - Recruitment screen connected to live candidate data
 - Resume upload form that posts files to the recruitment endpoint
 - Analytics dashboard connected to backend metrics
 - Protected admin routes:
+  - `/admin/dashboard`
   - `/admin/jobs`
   - `/admin/candidates`
+  - `/admin/employees`
   - `/admin/leaves`
 - Sidebar-based HR manager dashboard for job, candidate, and leave operations
 - AI-generated job draft modal with editable preview before HR finalization
-- Candidate pipeline table with job filter, recommendation badges, and transcript detail view
-- Leave requests table with approve/reject actions and a quota sub-tab
+- Candidate pipeline table with job filter, recommendation badges, transcript detail view, and AI interview email sending
+- Leave requests table with approve/reject actions, required rejection reason modal, and email-status indicator
 - Candidate jobs landing page now backed by live open jobs from the backend
 - Employee auth pages:
   - `/employee/signup`
   - `/employee/login`
-  - `/employee/dashboard`
+  - `/employee/dashboard` (redirects to `/employee/chat`)
 - Global employee auth context with session rehydration via `/api/auth/employee/me`
 - Employee sessions use httpOnly cookies instead of `localStorage`
 
@@ -127,6 +166,12 @@ hrrecruiting-chatbot/
 - [chat.py](/home/unitedsol/hrrecruiting-chatbot/backend/app/api/routes/chat.py)
   WebSocket endpoint used by the live chat UI.
 
+- [employee_portal.py](/home/unitedsol/hrrecruiting-chatbot/backend/app/api/routes/employee_portal.py)
+  Employee leave chat and employee leave portal REST endpoints.
+
+- [public_candidate.py](/home/unitedsol/hrrecruiting-chatbot/backend/app/api/routes/public_candidate.py)
+  Public job listing and candidate chatbot endpoints (no auth).
+
 - [recruitment.py](/home/unitedsol/hrrecruiting-chatbot/backend/app/api/routes/recruitment.py)
   Resume upload, candidate scoring API, and public open-jobs listing.
 
@@ -139,6 +184,12 @@ hrrecruiting-chatbot/
 - [agentic.py](/home/unitedsol/hrrecruiting-chatbot/backend/app/services/agentic.py)
   LangGraph-compatible orchestration wrapper for leave and recruitment workflows.
 
+- [employee_portal.py](/home/unitedsol/hrrecruiting-chatbot/backend/app/services/employee_portal.py)
+  AI leave assistant orchestration, leave submission validation, and quota updates.
+
+- [candidate_public.py](/home/unitedsol/hrrecruiting-chatbot/backend/app/services/candidate_public.py)
+  Public CV parsing, AI extraction, interview question generation, chat session progression, and final scoring.
+
 ## Demo Credentials
 
 Seeded demo users:
@@ -146,6 +197,9 @@ Seeded demo users:
 - Admin:
   - email: `admin.hr@talentspark.dev`
   - password: `admin123`
+- Admin (default HR admin seed):
+  - email: `admin@company.com`
+  - password: `Admin@1234`
 - Candidate:
   - email: `candidate@talentspark.dev`
   - password: `user123`
@@ -156,8 +210,7 @@ Pre-registered employee records for signup testing:
 - `sarah.mitchell@talentspark.dev`
 - `tom.anderson@talentspark.dev`
 
-Employees should use `/employee/signup` first, then `/employee/login`.
-Admin and candidate demo entry points are still available for local development.
+Employees should use `/employee/signup` first, then sign in from the landing-page Sign-In modal (or `/employee/login` for the legacy flow).
 
 ## How To Run With Docker
 
@@ -214,6 +267,7 @@ When the backend starts against the `hr_chatbot` database, it creates these core
 - `leaverequest`
 - `leave_quota`
 - `token_blocklist`
+- `notifications`
 - `checkpoints`
 - `checkpoint_writes`
 
@@ -458,9 +512,13 @@ npm run dev
 
 ### Auth
 
-- `POST /api/auth/login`
+- `POST /api/auth/login` (unified login for admin/employee; candidate login supported for legacy/demo users)
 - `POST /api/auth/signup`
 - `GET /api/auth/me`
+- `POST /api/auth/employee/signup`
+- `POST /api/auth/employee/login`
+- `GET /api/auth/employee/me`
+- `POST /api/auth/employee/logout`
 
 ### Leave
 
@@ -468,6 +526,21 @@ npm run dev
 - `PATCH /api/leave/requests/{id}`
 - `GET /api/leave/balance/me`
 - `POST /api/leave/balance/sync/{provider}/{employee_id}`
+
+### Employee Portal
+
+- `POST /api/chat/leave`
+- `POST /api/leaves`
+- `GET /api/leaves/my`
+- `GET /api/leaves/quota/my`
+
+### Public Candidate Application (No Auth)
+
+- `GET /api/jobs/public`
+- `POST /api/candidates/upload-cv`
+- `POST /api/candidates/apply/{job_id}`
+- `POST /api/chat/candidate`
+- `POST /api/candidates/submit`
 
 ### Recruitment
 
@@ -491,6 +564,22 @@ npm run dev
 
 ### Admin
 
+- `GET /api/admin/jobs`
+- `POST /api/admin/jobs`
+- `PATCH /api/admin/jobs/{job_id}`
+- `DELETE /api/admin/jobs/{job_id}`
+- `GET /api/admin/candidates`
+- `GET /api/admin/candidates/{candidate_id}`
+- `POST /api/admin/candidates/{candidate_id}/generate-interview-email`
+- `POST /api/admin/candidates/{candidate_id}/send-interview-email`
+- `GET /api/admin/leaves`
+- `PATCH /api/admin/leaves/{leave_id}`
+- `GET /api/admin/employees/leave-quota`
+- `POST /api/admin/employees`
+- `GET /api/admin/employees`
+- `GET /api/admin/employees/{employee_id}`
+- `PATCH /api/admin/employees/{employee_id}`
+- `DELETE /api/admin/employees/{employee_id}` (soft delete)
 - `GET /api/admin/all-leaves`
 - `GET /api/admin/users`
 - `POST /api/admin/users/{user_id}/promote`
@@ -501,8 +590,10 @@ npm run dev
 The frontend now uses:
 
 - `fetch()` for REST endpoints
-- WebSockets for the main chat screen
-- auto-login with seeded demo users for local development
+- REST chat for employee leave assistant (`/api/chat/leave`)
+- REST chat for public candidate applications (`/api/chat/candidate`)
+- WebSockets only for the shared chat runtime endpoint (`/api/ws/chat`)
+- landing-page modal sign-in that stores JWT session and redirects by role
 
 Frontend environment variables:
 
@@ -529,15 +620,17 @@ See [talent-spark/.env.example](/home/unitedsol/hrrecruiting-chatbot/talent-spar
 10. The existing interview scoring system grades each answer and updates the weighted candidate score live
 11. The Recruitment Hub shows the skim insights, generated questions, interview transcript, and current scores
 
-## OpenAI Recruitment Configuration
+## OpenAI Configuration
 
-The recruitment intake flow now supports a dedicated AI skim-reading layer before the interview starts.
+The platform now uses OpenAI for both recruitment AI flows and the employee leave assistant.
 
 Recommended backend environment variables:
 
 - `OPENAI_API_KEY`
 - `OPENAI_RECRUITMENT_MODEL`
 - `OPENAI_EVALUATOR_MODEL`
+- `OPENAI_LEAVE_CHAT_MODEL`
+- `OPENAI_EMAIL_MODEL` (defaults to `gpt-4o-mini-2024-07-18`)
 
 Example:
 
@@ -545,22 +638,62 @@ Example:
 OPENAI_API_KEY=your_real_openai_api_key
 OPENAI_RECRUITMENT_MODEL=gpt-5-mini
 OPENAI_EVALUATOR_MODEL=gpt-5-mini
+OPENAI_LEAVE_CHAT_MODEL=gpt-5-mini
+OPENAI_EMAIL_MODEL=gpt-4o-mini-2024-07-18
 ```
 
 Behavior:
 
 - `OPENAI_RECRUITMENT_MODEL` is used for the CV skim and question-generation step
 - `OPENAI_EVALUATOR_MODEL` is used for per-answer grading during the interview
-- if no valid OpenAI key is present, the app keeps working with local heuristic fallback logic
+- `OPENAI_LEAVE_CHAT_MODEL` is used for `/api/chat/leave` employee leave conversations
+- `OPENAI_EMAIL_MODEL` is used for AI-generated welcome/interview/leave decision email templates
+- public candidate CV extraction and question generation use `OPENAI_RECRUITMENT_MODEL`
+- public candidate final interview scoring uses `OPENAI_EVALUATOR_MODEL`
+- recruitment flows can fall back to heuristics, but employee leave chat requires a valid OpenAI key
+
+### Email Service Configuration
+
+All system-generated emails (welcome, interview invite, leave approved/rejected) use one centralized backend service.
+
+Required/optional backend variables:
+
+- `EMAIL_FROM_ADDRESS`
+- `EMAIL_FROM_NAME`
+- `SENDGRID_API_KEY` (optional, preferred provider when present)
+- `SMTP_HOST` (fallback provider)
+- `SMTP_PORT`
+- `SMTP_USER`
+- `SMTP_PASS`
+- `COMPANY_NAME`
+- `SIGNUP_URL`
+
+Provider priority:
+
+1. SendGrid (when `SENDGRID_API_KEY` is set)
+2. SMTP fallback
 
 ## Leave Chat Flow
 
-1. Open the main chat screen
+1. Open `/employee/chat`
 2. Send a leave-related message such as `I need next Tuesday off`
-3. The backend classifies the workflow
-4. The leave engine asks for missing slots
-5. Once dates, reason, and handover details are collected, the backend stores a pending leave request
-6. Sensitive medical details are redacted before persistence
+3. Frontend sends `POST /api/chat/leave` with message + conversation history
+4. Backend injects employee profile, leave quota, and pending/approved history into the AI system prompt
+5. AI replies conversationally and asks follow-ups when required
+6. When AI emits a structured `<<<LEAVE_SUBMISSION>>>` block, backend validates quota + overlap again
+7. If valid, backend stores a pending leave request and tentatively deducts quota
+
+## Public Candidate Chat Flow
+
+1. Candidate opens `/` and views open jobs from `GET /api/jobs/public`
+2. Candidate clicks **Apply Now** and lands on `/apply/{job_id}`
+3. Chatbot collects first name, last name, and email sequentially
+4. Candidate uploads CV (`.pdf` or `.docx`, max 5MB) to `POST /api/candidates/upload-cv`
+5. Backend extracts CV text, builds structured summary JSON, and stores both
+6. Application session starts via `POST /api/candidates/apply/{job_id}`
+7. Chat asks 6 AI-generated screening questions one-by-one via `POST /api/chat/candidate`
+8. After all answers, frontend calls `POST /api/candidates/submit` for final AI scoring and persistence
+9. Candidate sees a success message without score/recommendation details
 
 ## Privacy and Security Notes
 

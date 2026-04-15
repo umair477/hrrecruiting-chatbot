@@ -9,6 +9,7 @@ from backend.app.models import (
     Candidate,
     CandidateStatus,
     Employee,
+    EmployeeRole,
     EmploymentType,
     InterviewStatus,
     Job,
@@ -26,6 +27,7 @@ from backend.app.services.leave import calculate_leave_days
 
 def seed_database(session: Session) -> None:
     employees = _ensure_employees(session)
+    _ensure_admin_employee(session, employees)
     jobs = _ensure_jobs(session)
     candidates = _ensure_candidates(session, jobs)
     _ensure_users(session, employees, candidates)
@@ -42,6 +44,7 @@ def _ensure_employees(session: Session) -> dict[str, Employee]:
             "department": "Engineering",
             "designation": "Engineering Manager",
             "date_of_joining": date(2024, 2, 12),
+            "role": EmployeeRole.EMPLOYEE,
         },
         {
             "name": "Raj Patel",
@@ -49,6 +52,7 @@ def _ensure_employees(session: Session) -> dict[str, Employee]:
             "department": "Design",
             "designation": "Product Designer",
             "date_of_joining": date(2024, 6, 3),
+            "role": EmployeeRole.EMPLOYEE,
         },
         {
             "name": "Tom Anderson",
@@ -56,6 +60,7 @@ def _ensure_employees(session: Session) -> dict[str, Employee]:
             "department": "Marketing",
             "designation": "Marketing Specialist",
             "date_of_joining": date(2023, 11, 20),
+            "role": EmployeeRole.EMPLOYEE,
         },
     ]
     employees_by_name: dict[str, Employee] = {}
@@ -71,6 +76,7 @@ def _ensure_employees(session: Session) -> dict[str, Employee]:
                 date_of_joining=payload["date_of_joining"],
                 password_hash=None,
                 is_active=True,
+                role=payload["role"],
                 annual_allowance=20,
                 leave_balance=20,
             )
@@ -85,6 +91,8 @@ def _ensure_employees(session: Session) -> dict[str, Employee]:
             if employee.date_of_joining is None:
                 employee.date_of_joining = payload["date_of_joining"]
             employee.is_active = True
+            if employee.role not in {EmployeeRole.ADMIN, EmployeeRole.EMPLOYEE}:
+                employee.role = payload["role"]
             if employee.annual_allowance <= 0:
                 employee.annual_allowance = 20
             if employee.leave_balance <= 0:
@@ -94,6 +102,43 @@ def _ensure_employees(session: Session) -> dict[str, Employee]:
         session.refresh(employee)
         employees_by_name[payload["name"]] = employee
     return employees_by_name
+
+
+def _ensure_admin_employee(session: Session, employees: dict[str, Employee]) -> None:
+    admin_employee = session.exec(
+        select(Employee).where(Employee.official_email == "admin@company.com")
+    ).first()
+    existing_admin = session.exec(select(Employee).where(Employee.role == EmployeeRole.ADMIN)).first()
+
+    if existing_admin is None and admin_employee is None:
+        admin_employee = Employee(
+            name="HR Admin",
+            full_name="HR Admin",
+            official_email="admin@company.com",
+            department="Human Resources",
+            designation="HR Manager",
+            date_of_joining=date(2024, 1, 1),
+            password_hash=hash_password("Admin@1234"),
+            is_active=True,
+            role=EmployeeRole.ADMIN,
+            annual_allowance=20,
+            leave_balance=20,
+        )
+    elif admin_employee is None and existing_admin is not None:
+        admin_employee = existing_admin
+
+    if admin_employee is None:
+        return
+
+    admin_employee.role = EmployeeRole.ADMIN
+    admin_employee.is_active = True
+    if not admin_employee.password_hash:
+        admin_employee.password_hash = hash_password("Admin@1234")
+
+    session.add(admin_employee)
+    session.commit()
+    session.refresh(admin_employee)
+    employees[admin_employee.full_name or admin_employee.name] = admin_employee
 
 
 def _ensure_jobs(session: Session) -> dict[str, Job]:
@@ -382,13 +427,23 @@ def _ensure_candidates(session: Session, jobs: dict[str, Job]) -> dict[str, Cand
 
 
 def _ensure_users(session: Session, employees: dict[str, Employee], candidates: dict[str, Candidate]) -> None:
+    admin_employee = session.exec(select(Employee).where(Employee.official_email == "admin@company.com")).first()
+    admin_employee_id = admin_employee.id if admin_employee is not None else employees["Sarah Mitchell"].id
     seed_users = [
         {
             "email": "admin.hr@talentspark.dev",
             "full_name": "Helen HR",
             "password": "admin123",
             "role": UserRole.ADMIN,
-            "employee_id": employees["Sarah Mitchell"].id,
+            "employee_id": admin_employee_id,
+            "candidate_id": None,
+        },
+        {
+            "email": "admin@company.com",
+            "full_name": "HR Admin",
+            "password": "Admin@1234",
+            "role": UserRole.ADMIN,
+            "employee_id": admin_employee_id,
             "candidate_id": None,
         },
         {

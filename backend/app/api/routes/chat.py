@@ -15,6 +15,9 @@ router = APIRouter(tags=["chat"])
 
 @router.websocket("/ws/chat")
 async def chat_socket(websocket: WebSocket) -> None:
+    # NOTE: There is no dedicated /chat/admin endpoint.
+    # This shared websocket handles both admin and employee chat traffic.
+    # If an admin-only chat endpoint is added later, deprecate it in favor of this shared route.
     token = websocket.query_params.get("token") or websocket.cookies.get(settings.employee_auth_cookie_name)
     if not token:
         await websocket.close(code=4401)
