@@ -46,6 +46,12 @@ _POLICY_SNIPPETS = {
 }
 
 
+def _as_utc_naive(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value
+    return value.astimezone(timezone.utc).replace(tzinfo=None)
+
+
 @router.post("/candidates/status-link", response_model=CandidateStatusLinkResponse)
 def create_candidate_status_link(
     payload: CandidateStatusLinkRequest,
@@ -59,7 +65,7 @@ def create_candidate_status_link(
 
     token = CandidatePortalToken(
         candidate_id=int(candidate.id),
-        expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
+        expires_at=datetime.utcnow() + timedelta(hours=24),
     )
     session.add(token)
     session.commit()
@@ -82,7 +88,7 @@ def get_candidate_portal_status(
     session: Session = Depends(get_session),
 ) -> CandidatePortalStatusResponse:
     portal_token = session.exec(select(CandidatePortalToken).where(CandidatePortalToken.token == access_token)).first()
-    if portal_token is None or portal_token.expires_at < datetime.now(timezone.utc):
+    if portal_token is None or _as_utc_naive(portal_token.expires_at) < datetime.utcnow():
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token.")
 
     candidate = session.get(Candidate, portal_token.candidate_id)
