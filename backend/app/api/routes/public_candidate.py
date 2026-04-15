@@ -28,7 +28,7 @@ from backend.app.services.candidate_public import (
     start_candidate_application_session,
     upsert_candidate_cv,
 )
-from backend.app.services.idempotency import fetch_record, payload_hash, save_record
+from backend.app.services.idempotency import IdempotencyConflictError, fetch_record, payload_hash, save_record
 
 
 router = APIRouter(tags=["public-candidate"])
@@ -235,13 +235,16 @@ def start_candidate_application(
         total_questions=len(candidate_session.questions),
     )
     if idempotency_key:
-        save_record(
-            session=session,
-            idempotency_key=idempotency_key,
-            endpoint="POST /api/candidates/apply/{job_id}",
-            request_hash=payload_hash(request_payload),
-            response_payload=response_payload.model_dump(),
-        )
+        try:
+            save_record(
+                session=session,
+                idempotency_key=idempotency_key,
+                endpoint="POST /api/candidates/apply/{job_id}",
+                request_hash=payload_hash(request_payload),
+                response_payload=response_payload.model_dump(),
+            )
+        except IdempotencyConflictError as exc:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     return response_payload
 
 
@@ -293,11 +296,14 @@ def submit_candidate_application(
         submitted=bool(result["submitted"]),
     )
     if idempotency_key:
-        save_record(
-            session=session,
-            idempotency_key=idempotency_key,
-            endpoint="POST /api/candidates/submit",
-            request_hash=payload_hash(request_payload),
-            response_payload=response_payload.model_dump(),
-        )
+        try:
+            save_record(
+                session=session,
+                idempotency_key=idempotency_key,
+                endpoint="POST /api/candidates/submit",
+                request_hash=payload_hash(request_payload),
+                response_payload=response_payload.model_dump(),
+            )
+        except IdempotencyConflictError as exc:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     return response_payload
