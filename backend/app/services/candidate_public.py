@@ -4,7 +4,6 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from io import BytesIO
 import json
-import logging
 import re
 from threading import Lock
 from typing import Any
@@ -31,8 +30,6 @@ try:
 except ImportError:  # pragma: no cover - optional dependency fallback
     PdfReader = None
 
-
-logger = logging.getLogger(__name__)
 
 MAX_CV_SIZE_BYTES = 5 * 1024 * 1024
 ALLOWED_CV_EXTENSIONS = (".pdf", ".docx")
@@ -165,38 +162,6 @@ def extract_cv_text(*, filename: str, raw_bytes: bytes) -> str:
     return extracted
 
 
-def _fallback_cv_summary(*, first_name: str, last_name: str, email: str, cv_text: str) -> dict[str, Any]:
-    words = cv_text.split()
-    skills_seed = [
-        "python",
-        "java",
-        "javascript",
-        "typescript",
-        "react",
-        "fastapi",
-        "django",
-        "sql",
-        "aws",
-        "docker",
-        "kubernetes",
-        "node",
-    ]
-    cv_lower = cv_text.lower()
-    skills = [skill for skill in skills_seed if skill in cv_lower][:8]
-    return {
-        "full_name": f"{first_name.strip()} {last_name.strip()}".strip(),
-        "email": email.strip(),
-        "phone": "",
-        "total_years_experience": 0,
-        "education": [],
-        "skills": [skill.title() for skill in skills],
-        "work_experience": [],
-        "certifications": [],
-        "languages": [],
-        "cv_word_count": len(words),
-    }
-
-
 def extract_cv_summary_with_llm(
     *,
     first_name: str,
@@ -260,9 +225,8 @@ def extract_cv_summary_with_llm(
             schema_name="candidate_cv_extract",
             schema=schema,
         )
-    except Exception:
-        logger.exception("CV extraction LLM call failed. Falling back to heuristic CV parsing.")
-        return _fallback_cv_summary(first_name=first_name, last_name=last_name, email=email, cv_text=cv_text)
+    except Exception as exc:
+        raise RuntimeError("CV extraction failed. OpenAI response could not be generated or parsed.") from exc
 
 
 def upsert_candidate_cv(
@@ -308,22 +272,6 @@ def upsert_candidate_cv(
     session.commit()
     session.refresh(candidate)
     return candidate
-
-
-def _fallback_questions(job: Job, cv_summary: dict[str, Any]) -> list[dict[str, Any]]:
-    skills = [str(skill).strip() for skill in cv_summary.get("skills", []) if str(skill).strip()]
-    responsibilities = [str(item).strip() for item in (job.responsibilities or []) if str(item).strip()]
-    primary_skill = skills[0] if skills else "your core technical stack"
-    secondary_skill = skills[1] if len(skills) > 1 else "relevant engineering tools"
-    responsibility = responsibilities[0] if responsibilities else "this role's key deliverables"
-    return [
-        {"question_id": 1, "question_text": f"How have you applied {primary_skill} in a recent project?", "category": "technical", "max_score": 10},
-        {"question_id": 2, "question_text": f"Which techniques do you use to keep quality high when working with {secondary_skill}?", "category": "technical", "max_score": 10},
-        {"question_id": 3, "question_text": f"Tell us about your most impactful experience related to {job.title}.", "category": "experience", "max_score": 10},
-        {"question_id": 4, "question_text": f"Describe a measurable achievement where you delivered {responsibility}.", "category": "experience", "max_score": 10},
-        {"question_id": 5, "question_text": "How would you handle a situation where project priorities change unexpectedly?", "category": "behavioral", "max_score": 10},
-        {"question_id": 6, "question_text": f"What motivates you to join our team as a {job.title}?", "category": "motivation", "max_score": 10},
-    ]
 
 
 def generate_screening_questions(*, job: Job, cv_summary: dict[str, Any]) -> list[dict[str, Any]]:
@@ -396,9 +344,8 @@ def generate_screening_questions(*, job: Job, cv_summary: dict[str, Any]) -> lis
         if len(cleaned) == 6:
             return cleaned
         raise ValueError("LLM returned fewer than 6 valid questions.")
-    except Exception:
-        logger.exception("Question generation LLM call failed. Falling back to deterministic questions.")
-        return _fallback_questions(job, cv_summary)
+    except Exception as exc:
+        raise RuntimeError("Question generation failed. OpenAI response could not be generated or parsed.") from exc
 
 
 def start_candidate_application_session(
@@ -565,50 +512,6 @@ def run_candidate_chat_turn(
     }
 
 
-def _fallback_evaluation(
-    *,
-    job: Job,
-    cv_summary: dict[str, Any],
-    interview_qa: list[dict[str, Any]],
-) -> dict[str, Any]:
-    required_terms = [str(skill).lower() for skill in (job.required_skills or [])]
-    scores: list[dict[str, Any]] = []
-    total = 0
-    for entry in interview_qa:
-        answer = str(entry.get("answer", "")).strip()
-        words = answer.split()
-        length_score = min(len(words) // 8, 5)
-        keyword_score = min(sum(1 for term in required_terms[:8] if term and term in answer.lower()), 5)
-        score = max(0, min(length_score + keyword_score, 10))
-        total += score
-        scores.append(
-            {
-                "question_id": int(entry.get("question_id", len(scores) + 1)),
-                "score": score,
-                "brief_justification": "Heuristic scoring based on relevance keywords and answer depth.",
-            }
-        )
-    percentage = round((total / max(len(interview_qa) * 10, 1)) * 100, 2)
-    if percentage >= 85:
-        recommendation = "Highly Recommended"
-    elif percentage >= 70:
-        recommendation = "Recommended"
-    elif percentage >= 50:
-        recommendation = "Needs Review"
-    else:
-        recommendation = "Not Recommended"
-    return {
-        "scores": scores,
-        "total_score": total,
-        "percentage_score": percentage,
-        "overall_summary": (
-            f"The candidate answered {len(interview_qa)} screening questions for the {job.title} role. "
-            f"Overall performance indicates {recommendation.lower()} fit based on response depth and relevance."
-        ),
-        "recommendation": recommendation,
-    }
-
-
 def evaluate_candidate_screening(
     *,
     job: Job,
@@ -657,9 +560,8 @@ def evaluate_candidate_screening(
             schema_name="candidate_screening_evaluation",
             schema=schema,
         )
-    except Exception:
-        logger.exception("Screening evaluation LLM call failed. Falling back to heuristic evaluator.")
-        return _fallback_evaluation(job=job, cv_summary=cv_summary, interview_qa=interview_qa)
+    except Exception as exc:
+        raise RuntimeError("Screening evaluation failed. OpenAI response could not be generated or parsed.") from exc
 
 
 def _status_for_recommendation(recommendation: str) -> CandidateStatus:
