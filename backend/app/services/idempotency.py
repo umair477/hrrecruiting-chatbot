@@ -4,9 +4,14 @@ from hashlib import sha256
 import json
 from typing import Any
 
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from backend.app.models import IdempotencyRecord
+
+
+class IdempotencyConflictError(ValueError):
+    """Raised when an idempotency key is reused with a different request payload."""
 
 
 def payload_hash(payload: dict[str, Any]) -> str:
@@ -35,6 +40,15 @@ def save_record(
         response_payload=response_payload,
     )
     session.add(record)
-    session.commit()
-    session.refresh(record)
-    return record
+    try:
+        session.commit()
+        session.refresh(record)
+        return record
+    except IntegrityError:
+        session.rollback()
+        existing = fetch_record(session=session, idempotency_key=idempotency_key)
+        if existing is None:
+            raise
+        if existing.request_hash != request_hash:
+            raise IdempotencyConflictError("Idempotency key reuse with different payload.")
+        return existing
