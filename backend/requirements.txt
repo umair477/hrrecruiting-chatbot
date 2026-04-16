@@ -12,3 +12,4 @@ langgraph==0.2.39
 google-auth==2.40.3
 google-auth-oauthlib==1.2.2
 google-api-python-client==2.172.0
+psycopg2-binary==2.9.9
