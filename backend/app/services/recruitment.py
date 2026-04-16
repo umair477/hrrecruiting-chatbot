@@ -5,7 +5,7 @@ from typing import Any
 
 from fastapi import UploadFile
 
-from backend.hr_chatbot.recruitment_scorecard import (
+from hr_chatbot.recruitment_scorecard import (
     Recommendation,
     extract_keywords,
     score_keyword_alignment,
