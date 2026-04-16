@@ -16,7 +16,16 @@ except ModuleNotFoundError:  # pragma: no cover - local env may not have passlib
     CryptContext = None
 
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto") if CryptContext is not None else None
+# Use bcrypt_sha256 to safely support long passwords/tokens while remaining
+# compatible with legacy bcrypt hashes.
+pwd_context = (
+    CryptContext(
+        schemes=["bcrypt_sha256", "bcrypt"],
+        deprecated="auto",
+    )
+    if CryptContext is not None
+    else None
+)
 
 
 def _legacy_hash_password(password: str, *, salt: str | None = None) -> str:
@@ -34,8 +43,13 @@ def hash_password(password: str, *, salt: str | None = None) -> str:
 
 
 def verify_password(password: str, hashed_password: str) -> bool:
-    if hashed_password.startswith("$2") and pwd_context is not None:
-        return pwd_context.verify(password, hashed_password)
+    if pwd_context is not None and pwd_context.identify(hashed_password) is not None:
+        try:
+            return pwd_context.verify(password, hashed_password)
+        except ValueError:
+            # bcrypt raises for secrets >72 bytes; bcrypt_sha256 avoids this for
+            # new hashes, and legacy bcrypt hashes should fail closed here.
+            return False
 
     try:
         salt, expected_digest = hashed_password.split("$", 1)
@@ -46,7 +60,12 @@ def verify_password(password: str, hashed_password: str) -> bool:
 
 
 def password_needs_rehash(hashed_password: str) -> bool:
-    return pwd_context is not None and not hashed_password.startswith("$2")
+    if pwd_context is None:
+        return False
+    identified_scheme = pwd_context.identify(hashed_password)
+    if identified_scheme is None:
+        return True
+    return bool(pwd_context.needs_update(hashed_password))
 
 
 def create_access_token(
