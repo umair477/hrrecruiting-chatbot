@@ -9,8 +9,8 @@ from urllib import error, request
 
 from sqlmodel import Session
 
-from backend.app.core.config import settings
-from backend.app.models import Notification
+from app.core.config import settings
+from app.models import Notification
 
 
 logger = logging.getLogger(__name__)

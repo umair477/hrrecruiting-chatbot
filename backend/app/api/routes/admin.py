@@ -6,9 +6,9 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlmodel import Session, select
 
-from backend.app.core.database import get_session
-from backend.app.deps import require_roles
-from backend.app.models import (
+from app.core.database import get_session
+from app.deps import require_roles
+from app.models import (
     Candidate,
     Employee,
     EmployeeRole,
@@ -22,7 +22,7 @@ from backend.app.models import (
     User,
     UserRole,
 )
-from backend.app.schemas import (
+from app.schemas import (
     AdminCandidateRead,
     AdminEmployeeCreateRequest,
     AdminEmployeeCreateResponse,
@@ -41,16 +41,16 @@ from backend.app.schemas import (
     LeaveRequestStatusUpdate,
     PromoteCandidateRequest,
 )
-from backend.app.services.admin_dashboard import generate_job_post, recommendation_label_for_score, split_full_name
-from backend.app.services.ai_email import (
+from app.services.admin_dashboard import generate_job_post, recommendation_label_for_score, split_full_name
+from app.services.ai_email import (
     generate_interview_invitation_email,
     generate_leave_approval_email,
     generate_leave_rejection_email,
     generate_welcome_email,
 )
-from backend.app.services.email_service import EmailService
-from backend.app.services.leave import calculate_leave_days, get_leave_quota_summary
-from backend.app.services.recruitment import hydrate_legacy_candidate
+from app.services.email_service import EmailService
+from app.services.leave import calculate_leave_days, get_leave_quota_summary
+from app.services.recruitment import hydrate_legacy_candidate
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 

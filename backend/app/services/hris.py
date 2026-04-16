@@ -4,7 +4,7 @@ from datetime import datetime
 
 from sqlmodel import Session, select
 
-from backend.app.models import Employee
+from app.models import Employee
 
 
 SUPPORTED_HRIS_PROVIDERS = {"workday", "bamboohr"}

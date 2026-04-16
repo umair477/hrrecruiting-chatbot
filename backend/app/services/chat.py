@@ -8,11 +8,11 @@ from sqlmodel import Session, select
 from hr_chatbot.leave_workflow import LeaveBalanceResult, LeaveInterviewEngine
 from hr_chatbot.router import Workflow, classify_workflow
 
-from backend.app.models import Candidate, Employee, InterviewStatus, LeaveRequest, LeaveStatus, User
-from backend.app.schemas import ChatSocketOutbound
-from backend.app.services.agentic import has_leave_agent_state, reset_leave_agent_state, run_leave_agent
-from backend.app.services.leave import get_leave_balance_summary, get_approved_leave_days
-from backend.app.services.recruitment import get_current_question, submit_interview_answer
+from app.models import Candidate, Employee, InterviewStatus, LeaveRequest, LeaveStatus, User
+from app.schemas import ChatSocketOutbound
+from app.services.agentic import has_leave_agent_state, reset_leave_agent_state, run_leave_agent
+from app.services.leave import get_leave_balance_summary, get_approved_leave_days
+from app.services.recruitment import get_current_question, submit_interview_answer
 
 
 @dataclass

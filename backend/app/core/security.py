@@ -8,7 +8,7 @@ from typing import Any
 
 from jose import JWTError, jwt
 
-from backend.app.core.config import settings
+from app.core.config import settings
 
 try:
     from passlib.context import CryptContext

@@ -4,7 +4,7 @@ from datetime import datetime
 
 from sqlmodel import Session, select
 
-from backend.app.models import Employee, LeaveRequest, LeaveStatus, LeaveType, User, UserRole
+from app.models import Employee, LeaveRequest, LeaveStatus, LeaveType, User, UserRole
 
 
 def calculate_leave_days(leave_request: LeaveRequest) -> int:

@@ -6,10 +6,10 @@ from fastapi import Cookie, Depends, Header, HTTPException, status
 from jose import JWTError
 from sqlmodel import Session, select
 
-from backend.app.core.database import get_session
-from backend.app.core.config import settings
-from backend.app.core.security import hash_token, read_bearer_token, require_token
-from backend.app.models import TokenBlocklist, User, UserRole
+from app.core.database import get_session
+from app.core.config import settings
+from app.core.security import hash_token, read_bearer_token, require_token
+from app.models import TokenBlocklist, User, UserRole
 
 
 def get_current_token(

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from backend.app.core.config import settings
+from app.core.config import settings
 
 
 def list_messaging_platforms() -> list[dict[str, object]]:

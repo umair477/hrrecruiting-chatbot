@@ -3,10 +3,10 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlmodel import Session, select
 
-from backend.app.core.database import get_session
-from backend.app.deps import require_roles
-from backend.app.models import Candidate, CandidateStatus, Job, JobStatus, User, UserRole
-from backend.app.schemas import (
+from app.core.database import get_session
+from app.deps import require_roles
+from app.models import Candidate, CandidateStatus, Job, JobStatus, User, UserRole
+from app.schemas import (
     CandidateApplicationRequest,
     CandidateApplicationStatusResponse,
     CandidateInterviewResponse,
@@ -15,8 +15,8 @@ from backend.app.schemas import (
     InterviewAnswerRequest,
     PublicJobRead,
 )
-from backend.app.services.admin_dashboard import split_full_name
-from backend.app.services.recruitment import (
+from app.services.admin_dashboard import split_full_name
+from app.services.recruitment import (
     build_candidate_interview_payload,
     get_current_question,
     hydrate_legacy_candidate,

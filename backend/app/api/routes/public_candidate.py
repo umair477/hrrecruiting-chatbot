@@ -5,9 +5,9 @@ from datetime import datetime
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Header, HTTPException, UploadFile, status
 from sqlmodel import Session, select
 
-from backend.app.core.database import engine, get_session
-from backend.app.models import CandidateAsyncJob, Job, JobStatus
-from backend.app.schemas import (
+from app.core.database import engine, get_session
+from app.models import CandidateAsyncJob, Job, JobStatus
+from app.schemas import (
     CandidateCVUploadResponse,
     CandidateAsyncJobResponse,
     CandidateAsyncJobStatusResponse,
@@ -19,7 +19,7 @@ from backend.app.schemas import (
     CandidatePublicSubmitResponse,
     PublicJobListingRead,
 )
-from backend.app.services.candidate_public import (
+from app.services.candidate_public import (
     extract_cv_summary_with_llm,
     extract_cv_text,
     finalize_candidate_application,
@@ -28,7 +28,7 @@ from backend.app.services.candidate_public import (
     start_candidate_application_session,
     upsert_candidate_cv,
 )
-from backend.app.services.idempotency import IdempotencyConflictError, fetch_record, payload_hash, save_record
+from app.services.idempotency import IdempotencyConflictError, fetch_record, payload_hash, save_record
 
 
 router = APIRouter(tags=["public-candidate"])

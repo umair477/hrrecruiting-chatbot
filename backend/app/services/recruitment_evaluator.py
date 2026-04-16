@@ -7,7 +7,7 @@ from urllib import error, request
 
 from hr_chatbot.recruitment_scorecard import extract_keywords
 
-from backend.app.core.config import settings
+from app.core.config import settings
 
 
 logger = logging.getLogger(__name__)

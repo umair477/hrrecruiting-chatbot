@@ -10,7 +10,7 @@ from typing import Any
 from sqlalchemy import Column, DateTime, Integer, MetaData, String, Table, Text, delete, insert, inspect, select, text
 from sqlmodel import Session, SQLModel, create_engine
 
-from backend.app.core.config import settings
+from app.core.config import settings
 
 
 logger = logging.getLogger(__name__)

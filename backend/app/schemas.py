@@ -5,7 +5,7 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from backend.app.models import (
+from app.models import (
     CandidateStatus,
     EmployeeRole,
     EmploymentType,

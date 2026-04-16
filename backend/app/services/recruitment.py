@@ -11,10 +11,10 @@ from hr_chatbot.recruitment_scorecard import (
     score_keyword_alignment,
 )
 
-from backend.app.models import Candidate, InterviewStatus
-from backend.app.services.admin_dashboard import split_full_name
-from backend.app.services.agentic import run_recruitment_agent, run_recruitment_interviewer
-from backend.app.services.recruitment_skimmer import skim_candidate_profile
+from app.models import Candidate, InterviewStatus
+from app.services.admin_dashboard import split_full_name
+from app.services.agentic import run_recruitment_agent, run_recruitment_interviewer
+from app.services.recruitment_skimmer import skim_candidate_profile
 
 try:
     from PyPDF2 import PdfReader

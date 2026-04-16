@@ -9,10 +9,10 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlmodel import Session, select
 
-from backend.app.core.config import settings
-from backend.app.core.database import get_session
-from backend.app.deps import get_current_user
-from backend.app.models import (
+from app.core.config import settings
+from app.core.database import get_session
+from app.deps import get_current_user
+from app.models import (
     Candidate,
     CandidateStatus,
     Employee,
@@ -23,7 +23,7 @@ from backend.app.models import (
     User,
     UserRole,
 )
-from backend.app.schemas import (
+from app.schemas import (
     InterviewAvailableSlotRead,
     InterviewAvailableSlotsResponse,
     InterviewBookingConfirmRequest,
@@ -36,13 +36,13 @@ from backend.app.schemas import (
     InterviewProposedSlot,
     InterviewRescheduleRequest,
 )
-from backend.app.services.ai_email import (
+from app.services.ai_email import (
     generate_interview_booking_confirmation_email,
     generate_interview_cancellation_email,
     generate_interview_self_scheduling_email,
 )
-from backend.app.services.calendar_factory import CalendarServiceFactory
-from backend.app.services.email_service import EmailService
+from app.services.calendar_factory import CalendarServiceFactory
+from app.services.email_service import EmailService
 
 router = APIRouter(tags=["interviews"])
 

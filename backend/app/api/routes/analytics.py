@@ -5,10 +5,10 @@ from collections import Counter
 from fastapi import APIRouter, Depends
 from sqlmodel import Session, select
 
-from backend.app.core.database import get_session
-from backend.app.deps import require_roles
-from backend.app.models import Candidate, Employee, LeaveRequest, LeaveStatus, User, UserRole
-from backend.app.schemas import AnalyticsOverview, AnalyticsPoint, MetricCard
+from app.core.database import get_session
+from app.deps import require_roles
+from app.models import Candidate, Employee, LeaveRequest, LeaveStatus, User, UserRole
+from app.schemas import AnalyticsOverview, AnalyticsPoint, MetricCard
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 

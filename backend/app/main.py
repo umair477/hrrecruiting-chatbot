@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.app.api.routes import (
+from app.api.routes import (
     admin,
     analytics,
     auth,
@@ -18,9 +18,9 @@ from backend.app.api.routes import (
     public_candidate,
     recruitment,
 )
-from backend.app.core.config import settings
-from backend.app.core.database import create_db_and_tables, session_scope
-from backend.app.seed import seed_database
+from app.core.config import settings
+from app.core.database import create_db_and_tables, session_scope
+from app.seed import seed_database
 
 
 @asynccontextmanager

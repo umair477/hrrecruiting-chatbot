@@ -10,8 +10,8 @@ from urllib import error, request
 
 from sqlmodel import Session, select
 
-from backend.app.core.config import settings
-from backend.app.models import Employee, LeaveQuota, LeaveRequest, LeaveStatus, LeaveType
+from app.core.config import settings
+from app.models import Employee, LeaveQuota, LeaveRequest, LeaveStatus, LeaveType
 
 
 logger = logging.getLogger(__name__)

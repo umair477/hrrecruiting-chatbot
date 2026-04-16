@@ -7,7 +7,7 @@ from typing import Any
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
-from backend.app.models import IdempotencyRecord
+from app.models import IdempotencyRecord
 
 
 class IdempotencyConflictError(ValueError):

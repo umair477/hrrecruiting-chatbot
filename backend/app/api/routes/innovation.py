@@ -6,9 +6,9 @@ from hashlib import sha256
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session, select
 
-from backend.app.core.database import get_session
-from backend.app.deps import get_current_user, require_roles
-from backend.app.models import (
+from app.core.database import get_session
+from app.deps import get_current_user, require_roles
+from app.models import (
     AuditEvent,
     Candidate,
     CandidatePortalToken,
@@ -20,7 +20,7 @@ from backend.app.models import (
     User,
     UserRole,
 )
-from backend.app.schemas import (
+from app.schemas import (
     AuditEventRead,
     CandidatePortalStatusResponse,
     CandidateStatusLinkRequest,
@@ -33,7 +33,7 @@ from backend.app.schemas import (
     PolicyAssistantRequest,
     PolicyAssistantResponse,
 )
-from backend.app.services.audit import log_audit_event
+from app.services.audit import log_audit_event
 
 
 router = APIRouter(prefix="/innovation", tags=["innovation"])

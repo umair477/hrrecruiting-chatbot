@@ -3,12 +3,12 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, select
 
-from backend.app.core.database import get_session
-from backend.app.deps import require_roles
-from backend.app.models import Employee, LeaveRequest, LeaveStatus, User, UserRole
-from backend.app.schemas import LeaveBalanceRead, LeaveRequestRead, LeaveRequestStatusUpdate
-from backend.app.services.hris import sync_leave_balance
-from backend.app.services.leave import calculate_leave_days, get_leave_balance_summary, resolve_leave_history_scope
+from app.core.database import get_session
+from app.deps import require_roles
+from app.models import Employee, LeaveRequest, LeaveStatus, User, UserRole
+from app.schemas import LeaveBalanceRead, LeaveRequestRead, LeaveRequestStatusUpdate
+from app.services.hris import sync_leave_balance
+from app.services.leave import calculate_leave_days, get_leave_balance_summary, resolve_leave_history_scope
 
 router = APIRouter(prefix="/leave", tags=["leave"])
 

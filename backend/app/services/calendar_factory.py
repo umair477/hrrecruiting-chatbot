@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from backend.app.core.config import settings
-from backend.app.services.google_calendar_service import GoogleCalendarService
+from app.core.config import settings
+from app.services.google_calendar_service import GoogleCalendarService
 
 
 class CalendarServiceFactory:

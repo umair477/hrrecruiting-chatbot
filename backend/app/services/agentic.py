@@ -4,9 +4,9 @@ from typing import Any, TypedDict
 
 from hr_chatbot.leave_workflow import LeaveInterviewEngine
 from hr_chatbot.recruitment_scorecard import build_scorecard
-from backend.app.services.recruitment_evaluator import evaluate_interview_answer
+from app.services.recruitment_evaluator import evaluate_interview_answer
 
-from backend.app.core.database import clear_checkpoint, has_checkpoint, load_checkpoint, save_checkpoint
+from app.core.database import clear_checkpoint, has_checkpoint, load_checkpoint, save_checkpoint
 
 try:
     from langgraph.graph import END, START, StateGraph

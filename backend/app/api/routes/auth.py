@@ -9,9 +9,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from jose import JWTError
 from sqlmodel import Session, select
 
-from backend.app.core.config import settings
-from backend.app.core.database import get_session
-from backend.app.core.security import (
+from app.core.config import settings
+from app.core.database import get_session
+from app.core.security import (
     create_access_token,
     decode_token,
     hash_password,
@@ -19,9 +19,9 @@ from backend.app.core.security import (
     password_needs_rehash,
     verify_password,
 )
-from backend.app.deps import get_current_token, get_current_user, require_roles
-from backend.app.models import Employee, EmployeeRole, TokenBlocklist, User, UserRole
-from backend.app.schemas import (
+from app.deps import get_current_token, get_current_user, require_roles
+from app.models import Employee, EmployeeRole, TokenBlocklist, User, UserRole
+from app.schemas import (
     AdminUserRead,
     EmployeeAuthProfile,
     EmployeeAuthResponse,

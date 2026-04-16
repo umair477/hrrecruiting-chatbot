@@ -3,12 +3,12 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session
 
-from backend.app.core.database import get_session
-from backend.app.deps import require_roles
-from backend.app.models import User, UserRole
-from backend.app.schemas import HRISSyncResponse, MessagingPlatformStatus
-from backend.app.services.hris import sync_leave_balance
-from backend.app.services.messaging import list_messaging_platforms
+from app.core.database import get_session
+from app.deps import require_roles
+from app.models import User, UserRole
+from app.schemas import HRISSyncResponse, MessagingPlatformStatus
+from app.services.hris import sync_leave_balance
+from app.services.messaging import list_messaging_platforms
 
 router = APIRouter(prefix="/integrations", tags=["integrations"])
 

@@ -4,7 +4,7 @@ from typing import Any
 
 from sqlmodel import Session
 
-from backend.app.models import AuditEvent
+from app.models import AuditEvent
 
 
 def log_audit_event(

@@ -4,8 +4,8 @@ from datetime import date, datetime
 
 from sqlmodel import Session, select
 
-from backend.app.core.security import hash_password
-from backend.app.models import (
+from app.core.security import hash_password
+from app.models import (
     Candidate,
     CandidateStatus,
     Employee,
@@ -21,8 +21,8 @@ from backend.app.models import (
     User,
     UserRole,
 )
-from backend.app.services.admin_dashboard import split_full_name
-from backend.app.services.leave import calculate_leave_days
+from app.services.admin_dashboard import split_full_name
+from app.services.leave import calculate_leave_days
 
 
 def seed_database(session: Session) -> None:

@@ -3,10 +3,10 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session
 
-from backend.app.core.database import get_session
-from backend.app.deps import require_roles
-from backend.app.models import Employee, LeaveRequest, User, UserRole
-from backend.app.schemas import (
+from app.core.database import get_session
+from app.deps import require_roles
+from app.models import Employee, LeaveRequest, User, UserRole
+from app.schemas import (
     EmployeeLeaveCreateRequest,
     EmployeeLeaveQuotaRead,
     EmployeeLeaveRead,
@@ -14,7 +14,7 @@ from backend.app.schemas import (
     LeaveChatRequest,
     LeaveChatResponse,
 )
-from backend.app.services.employee_portal import (
+from app.services.employee_portal import (
     coerce_leave_type,
     get_employee_leave_quota_summary,
     list_employee_leave_history,

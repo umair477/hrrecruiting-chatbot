@@ -12,8 +12,8 @@ from uuid import uuid4
 
 from sqlmodel import Session, select
 
-from backend.app.core.config import settings
-from backend.app.models import Candidate, CandidateStatus, InterviewStatus, Job, JobStatus
+from app.core.config import settings
+from app.models import Candidate, CandidateStatus, InterviewStatus, Job, JobStatus
 
 try:
     import pdfplumber
