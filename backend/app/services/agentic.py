@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any, TypedDict
 
-from hr_chatbot.leave_workflow import LeaveInterviewEngine
-from hr_chatbot.recruitment_scorecard import build_scorecard
+from backend.hr_chatbot.leave_workflow import LeaveInterviewEngine
+from backend.hr_chatbot.recruitment_scorecard import build_scorecard
 from app.services.recruitment_evaluator import evaluate_interview_answer
 
 from app.core.database import clear_checkpoint, has_checkpoint, load_checkpoint, save_checkpoint

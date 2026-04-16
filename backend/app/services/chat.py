@@ -5,8 +5,8 @@ from datetime import date
 
 from sqlmodel import Session, select
 
-from hr_chatbot.leave_workflow import LeaveBalanceResult, LeaveInterviewEngine
-from hr_chatbot.router import Workflow, classify_workflow
+from backend.hr_chatbot.leave_workflow import LeaveBalanceResult, LeaveInterviewEngine
+from backend.hr_chatbot.router import Workflow, classify_workflow
 
 from app.models import Candidate, Employee, InterviewStatus, LeaveRequest, LeaveStatus, User
 from app.schemas import ChatSocketOutbound

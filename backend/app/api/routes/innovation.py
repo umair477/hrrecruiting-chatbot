@@ -218,7 +218,7 @@ def list_audit_events(
 
 @router.get("/routing/intent")
 def intent_router_preview(message: str) -> dict[str, str | float]:
-    from hr_chatbot.router import classify_workflow
+    from backend.hr_chatbot.router import classify_workflow
 
     decision = classify_workflow(message)
     fingerprint = sha256(message.strip().lower().encode("utf-8")).hexdigest()[:16]

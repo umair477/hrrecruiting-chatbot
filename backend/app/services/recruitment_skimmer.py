@@ -5,7 +5,7 @@ import logging
 from typing import Any
 from urllib import error, request
 
-from hr_chatbot.recruitment_scorecard import extract_keywords, generate_behavioral_questions
+from backend.hr_chatbot.recruitment_scorecard import extract_keywords, generate_behavioral_questions
 
 from app.core.config import settings
 
