@@ -9,6 +9,7 @@ from backend.app.models import (
     CandidateStatus,
     EmployeeRole,
     EmploymentType,
+    InterviewScheduleStatus,
     InterviewStatus,
     JobStatus,
     LeaveStatus,
@@ -432,6 +433,109 @@ class InterviewEmailSendRequest(BaseModel):
     subject: str
     body: str
     interview_date: Optional[date] = None
+
+
+class InterviewAvailableSlotRead(BaseModel):
+    slot_id: str
+    start: datetime
+    end: datetime
+    formatted_display: str
+    day_of_week: str
+
+
+class InterviewAvailableSlotsResponse(BaseModel):
+    slots: list[InterviewAvailableSlotRead]
+
+
+class InterviewProposedSlot(BaseModel):
+    start: datetime
+    end: datetime
+
+
+class InterviewBookingRequestCreate(BaseModel):
+    candidate_id: int
+    job_id: Optional[int] = None
+    proposed_slots: list[InterviewProposedSlot] = Field(min_length=2, max_length=3)
+    format: str = Field(min_length=2, max_length=80)
+    location_or_link: str = ""
+    interviewer_ids: list[int] = Field(default_factory=list)
+    notes: str = ""
+
+
+class InterviewBookingRequestCreateResponse(BaseModel):
+    interview_id: int
+    booking_token: str
+    booking_url: str
+    token_expires_at: datetime
+    email_subject: str
+    email_body: str
+    email_sent: bool
+
+
+class InterviewBookingRead(BaseModel):
+    interview_id: int
+    candidate_id: int
+    candidate_name: str
+    candidate_email: str
+    job_id: Optional[int] = None
+    job_title: str
+    format: str
+    location_or_link: str
+    interviewer_ids: list[int]
+    proposed_slots: list[InterviewProposedSlot]
+    selected_slot_start: Optional[datetime] = None
+    selected_slot_end: Optional[datetime] = None
+    token_expires_at: datetime
+    status: InterviewScheduleStatus
+    meet_link: Optional[str] = None
+    notes: str = ""
+    created_at: datetime
+
+
+class InterviewBookingPortalRead(BaseModel):
+    interview_id: int
+    candidate_name: str
+    candidate_email: str
+    job_title: str
+    format: str
+    location_or_link: str
+    proposed_slots: list[InterviewAvailableSlotRead]
+    selected_slot_start: Optional[datetime] = None
+    selected_slot_end: Optional[datetime] = None
+    token_expires_at: datetime
+    status: InterviewScheduleStatus
+    meet_link: Optional[str] = None
+
+
+class InterviewBookingConfirmRequest(BaseModel):
+    selected_slot_start: datetime
+    selected_slot_end: datetime
+
+
+class InterviewBookingConfirmResponse(BaseModel):
+    message: str
+    interview_id: int
+    status: InterviewScheduleStatus
+    selected_slot_start: datetime
+    selected_slot_end: datetime
+    format: str
+    meet_link: Optional[str] = None
+    candidate_email: str
+    google_calendar_url: str
+    outlook_calendar_url: str
+    ics_download_url: str
+
+
+class InterviewCancelRequest(BaseModel):
+    reason: str = Field(min_length=2, max_length=800)
+
+
+class InterviewRescheduleRequest(BaseModel):
+    new_proposed_slots: list[InterviewProposedSlot] = Field(min_length=1, max_length=5)
+    format: Optional[str] = None
+    location_or_link: Optional[str] = None
+    interviewer_ids: Optional[list[int]] = None
+    notes: Optional[str] = None
 
 
 class AdminLeaveRead(BaseModel):

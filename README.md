@@ -61,6 +61,17 @@ The product supports two core workflows:
   - `GET /api/admin/candidates/{candidate_id}`
   - `POST /api/admin/candidates/{candidate_id}/generate-interview-email`
   - `POST /api/admin/candidates/{candidate_id}/send-interview-email`
+- Interview scheduling automation endpoints:
+  - `GET /api/admin/interviews/available-slots`
+  - `POST /api/admin/interviews/create-booking-request`
+  - `GET /api/admin/interviews`
+  - `POST /api/admin/interviews/{interview_id}/cancel`
+  - `POST /api/admin/interviews/{interview_id}/reschedule`
+  - `POST /api/admin/interviews/{interview_id}/resend-invite`
+  - `POST /api/admin/interviews/{interview_id}/complete`
+  - `GET /api/interviews/booking/{booking_token}` (public)
+  - `POST /api/interviews/booking/{booking_token}/confirm` (public)
+  - `GET /api/interviews/booking/{booking_token}/calendar.ics` (public)
 - Admin leave management endpoints:
   - `GET /api/admin/leaves`
   - `PATCH /api/admin/leaves/{leave_id}`
@@ -73,6 +84,8 @@ The product supports two core workflows:
   - `DELETE /api/admin/employees/{employee_id}` (soft delete)
 - Centralized email delivery service with notification audit logs (`notifications` table)
 - Public recruitment jobs endpoint for candidates: `GET /api/recruitment/jobs`
+- Calendar provider factory with pluggable provider selection via `CALENDAR_PROVIDER` (`google` default)
+- Google Calendar service integration with free/busy lookup, event creation, Meet link generation, and cancellation hooks
 
 ### AI and Workflow Logic
 
@@ -120,9 +133,12 @@ The product supports two core workflows:
   - `/admin/leaves`
 - Sidebar-based HR manager dashboard for job, candidate, and leave operations
 - AI-generated job draft modal with editable preview before HR finalization
-- Candidate pipeline table with job filter, recommendation badges, transcript detail view, and AI interview email sending
+- Candidate pipeline page now includes:
+  - `Candidates` tab with automated slot-proposal interview scheduling
+  - `Interviews` tab with status badges, cancel/reschedule, resend invite, and mark-complete actions
 - Leave requests table with approve/reject actions, required rejection reason modal, and email-status indicator
 - Candidate jobs landing page now backed by live open jobs from the backend
+- Public self-booking interview page: `/schedule/{booking_token}`
 - Employee auth pages:
   - `/employee/signup`
   - `/employee/login`
@@ -181,8 +197,17 @@ hrrecruiting-chatbot/
 - [admin.py](/home/unitedsol/hrrecruiting-chatbot/backend/app/api/routes/admin.py)
   HR manager dashboard endpoints for jobs, candidates, leave requests, and leave quota visibility.
 
+- [interviews.py](/home/unitedsol/hrrecruiting-chatbot/backend/app/api/routes/interviews.py)
+  Admin interview scheduling endpoints, public booking-token validation, slot confirmation, and `.ics` generation.
+
 - [agentic.py](/home/unitedsol/hrrecruiting-chatbot/backend/app/services/agentic.py)
   LangGraph-compatible orchestration wrapper for leave and recruitment workflows.
+
+- [calendar_factory.py](/home/unitedsol/hrrecruiting-chatbot/backend/app/services/calendar_factory.py)
+  Calendar provider factory used by interview scheduling flows.
+
+- [google_calendar_service.py](/home/unitedsol/hrrecruiting-chatbot/backend/app/services/google_calendar_service.py)
+  Google Calendar free/busy, event creation, Meet link generation, and cancellation integration.
 
 - [employee_portal.py](/home/unitedsol/hrrecruiting-chatbot/backend/app/services/employee_portal.py)
   AI leave assistant orchestration, leave submission validation, and quota updates.
@@ -211,6 +236,22 @@ Pre-registered employee records for signup testing:
 - `tom.anderson@talentspark.dev`
 
 Employees should use `/employee/signup` first, then sign in from the landing-page Sign-In modal (or `/employee/login` for the legacy flow).
+
+## Interview Scheduling Environment Variables
+
+Add these values in `backend/.env` (or copy from `backend/.env.example`) for calendar-backed interview scheduling:
+
+- `FRONTEND_BASE_URL` (for self-booking links, e.g. `http://localhost:5173`)
+- `CALENDAR_PROVIDER` (`google`)
+- `INTERVIEW_DURATION_MINUTES`
+- `WORKING_HOURS_START` and `WORKING_HOURS_END`
+- `SLOTS_TO_PROPOSE`
+- `BOOKING_TOKEN_EXPIRY_HOURS`
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
+- `GOOGLE_REDIRECT_URI`
+- `GOOGLE_CALENDAR_ID` (`primary` or shared calendar ID)
+- `GOOGLE_REFRESH_TOKEN`
 
 ## How To Run With Docker
 
@@ -264,6 +305,7 @@ When the backend starts against the `hr_chatbot` database, it creates these core
 - `employee`
 - `jobs`
 - `candidate`
+- `interviews`
 - `leaverequest`
 - `leave_quota`
 - `token_blocklist`

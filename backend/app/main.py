@@ -13,6 +13,7 @@ from backend.app.api.routes import (
     employee_portal,
     innovation,
     integrations,
+    interviews,
     leave,
     public_candidate,
     recruitment,
@@ -50,6 +51,7 @@ app.include_router(chat.router, prefix="/api")
 app.include_router(employee_portal.router, prefix="/api")
 app.include_router(public_candidate.router, prefix="/api")
 app.include_router(innovation.router, prefix="/api")
+app.include_router(interviews.router, prefix="/api")
 
 
 @app.get("/api/health")

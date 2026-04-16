@@ -47,6 +47,18 @@ class Settings:
     company_name: str = os.getenv("COMPANY_NAME", "Talent Spark")
     signup_url: str = os.getenv("SIGNUP_URL", "http://localhost:5173/employee/signup")
     openai_email_model: str = os.getenv("OPENAI_EMAIL_MODEL", "gpt-4o-mini-2024-07-18")
+    frontend_base_url: str = os.getenv("FRONTEND_BASE_URL", "http://localhost:5173")
+    calendar_provider: str = os.getenv("CALENDAR_PROVIDER", "google")
+    interview_duration_minutes: int = int(os.getenv("INTERVIEW_DURATION_MINUTES", "45"))
+    working_hours_start: str = os.getenv("WORKING_HOURS_START", "09:00")
+    working_hours_end: str = os.getenv("WORKING_HOURS_END", "17:00")
+    slots_to_propose: int = int(os.getenv("SLOTS_TO_PROPOSE", "5"))
+    booking_token_expiry_hours: int = int(os.getenv("BOOKING_TOKEN_EXPIRY_HOURS", "48"))
+    google_client_id: str = os.getenv("GOOGLE_CLIENT_ID", "")
+    google_client_secret: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
+    google_redirect_uri: str = os.getenv("GOOGLE_REDIRECT_URI", "")
+    google_calendar_id: str = os.getenv("GOOGLE_CALENDAR_ID", "primary")
+    google_refresh_token: str = os.getenv("GOOGLE_REFRESH_TOKEN", "")
 
 
 settings = Settings()

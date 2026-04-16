@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 import json
 import logging
 from typing import Any
@@ -171,6 +171,133 @@ def generate_interview_invitation_email(
         "The interview will focus on your background, skills, and experience relevant to the role. "
         "Please confirm your availability by replying to this email.\n\n"
         f"Additional Notes: {additional_notes or 'N/A'}\n\n"
+        f"Best regards,\n{settings.email_from_name}"
+    )
+    return _safe_generate(prompt=prompt, fallback_subject=fallback_subject, fallback_body=fallback_body)
+
+
+def generate_interview_self_scheduling_email(
+    *,
+    candidate_name: str,
+    job_title: str,
+    interview_format: str,
+    booking_url: str,
+    booking_deadline: datetime,
+    additional_notes: str = "",
+) -> dict[str, str]:
+    company_name = settings.company_name
+    prompt = (
+        f"You are an HR professional at {company_name}.\n"
+        "Write a concise, professional interview scheduling email.\n\n"
+        f"Candidate Name: {candidate_name}\n"
+        f"Job Title: {job_title}\n"
+        f"Interview Format: {interview_format}\n"
+        f"Self-booking URL: {booking_url}\n"
+        f"Booking Deadline (UTC): {booking_deadline.isoformat()}\n"
+        f"Additional Notes: {additional_notes or 'None'}\n\n"
+        "Requirements:\n"
+        "- Congratulate the candidate for being shortlisted.\n"
+        "- Explain they should choose one of the offered slots through the self-booking link.\n"
+        "- Mention the booking link expires and they should respond within 24 hours.\n"
+        "- Keep tone warm and encouraging.\n"
+        "Return JSON with keys subject and body."
+    )
+    fallback_subject = f"Choose Your Interview Slot - {job_title}"
+    fallback_body = (
+        f"Dear {candidate_name},\n\n"
+        f"Congratulations. You have been shortlisted for the {job_title} role at {company_name}.\n\n"
+        f"Please book your interview slot using this secure link:\n{booking_url}\n\n"
+        f"Interview format: {interview_format}\n"
+        "Please complete your booking within 24 hours so we can confirm the panel schedule.\n\n"
+        f"{additional_notes.strip()}\n\n" if additional_notes.strip() else ""
+    )
+    if not additional_notes.strip():
+        fallback_body = (
+            f"Dear {candidate_name},\n\n"
+            f"Congratulations. You have been shortlisted for the {job_title} role at {company_name}.\n\n"
+            f"Please book your interview slot using this secure link:\n{booking_url}\n\n"
+            f"Interview format: {interview_format}\n"
+            "Please complete your booking within 24 hours so we can confirm the panel schedule.\n\n"
+            f"Best regards,\n{settings.email_from_name}"
+        )
+    else:
+        fallback_body = (
+            f"Dear {candidate_name},\n\n"
+            f"Congratulations. You have been shortlisted for the {job_title} role at {company_name}.\n\n"
+            f"Please book your interview slot using this secure link:\n{booking_url}\n\n"
+            f"Interview format: {interview_format}\n"
+            "Please complete your booking within 24 hours so we can confirm the panel schedule.\n\n"
+            f"Additional Notes: {additional_notes.strip()}\n\n"
+            f"Best regards,\n{settings.email_from_name}"
+        )
+    return _safe_generate(prompt=prompt, fallback_subject=fallback_subject, fallback_body=fallback_body)
+
+
+def generate_interview_booking_confirmation_email(
+    *,
+    recipient_name: str,
+    job_title: str,
+    start_at: datetime,
+    end_at: datetime,
+    interview_format: str,
+    location_or_link: str,
+    is_candidate: bool,
+) -> dict[str, str]:
+    audience = "candidate" if is_candidate else "interviewer"
+    company_name = settings.company_name
+    prompt = (
+        f"You are an HR coordinator at {company_name}. Write a concise confirmation email for a scheduled interview.\n"
+        f"Recipient Name: {recipient_name}\n"
+        f"Audience: {audience}\n"
+        f"Job Title: {job_title}\n"
+        f"Start (UTC): {start_at.isoformat()}\n"
+        f"End (UTC): {end_at.isoformat()}\n"
+        f"Format: {interview_format}\n"
+        f"Location/Join link: {location_or_link}\n"
+        "Return JSON with subject and body."
+    )
+    fallback_subject = f"Interview Confirmed - {job_title}"
+    role_sentence = (
+        "Your interview is confirmed."
+        if is_candidate
+        else "An interview has been scheduled and added to your calendar."
+    )
+    fallback_body = (
+        f"Hi {recipient_name},\n\n"
+        f"{role_sentence}\n\n"
+        f"Role: {job_title}\n"
+        f"Start (UTC): {start_at.strftime('%Y-%m-%d %H:%M')}\n"
+        f"End (UTC): {end_at.strftime('%Y-%m-%d %H:%M')}\n"
+        f"Format: {interview_format}\n"
+        f"Location/Link: {location_or_link}\n\n"
+        f"Best regards,\n{settings.email_from_name}"
+    )
+    return _safe_generate(prompt=prompt, fallback_subject=fallback_subject, fallback_body=fallback_body)
+
+
+def generate_interview_cancellation_email(
+    *,
+    candidate_name: str,
+    job_title: str,
+    reason: str,
+) -> dict[str, str]:
+    company_name = settings.company_name
+    prompt = (
+        f"You are an HR professional at {company_name}.\n"
+        "Write a short, empathetic interview cancellation email.\n"
+        f"Candidate Name: {candidate_name}\n"
+        f"Job Title: {job_title}\n"
+        f"Reason: {reason}\n"
+        "Mention that HR will follow up with next steps.\n"
+        "Return JSON with subject and body."
+    )
+    fallback_subject = f"Update on Your {job_title} Interview"
+    fallback_body = (
+        f"Dear {candidate_name},\n\n"
+        "Thank you for your continued interest in this opportunity. "
+        "We need to cancel the currently scheduled interview.\n\n"
+        f"Reason: {reason}\n\n"
+        "Our HR team will follow up with next steps as soon as possible.\n\n"
         f"Best regards,\n{settings.email_from_name}"
     )
     return _safe_generate(prompt=prompt, fallback_subject=fallback_subject, fallback_body=fallback_body)

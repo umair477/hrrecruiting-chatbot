@@ -60,6 +60,15 @@ class InterviewStatus(str, Enum):
     COMPLETED = "completed"
 
 
+class InterviewScheduleStatus(str, Enum):
+    PENDING_BOOKING = "pending_booking"
+    BOOKED = "booked"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+    RESCHEDULED = "rescheduled"
+    EXPIRED = "expired"
+
+
 class User(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     email: str = Field(index=True, unique=True)
@@ -199,6 +208,43 @@ class Candidate(SQLModel, table=True):
     interview_email_sent_at: Optional[datetime] = Field(default=None)
     applied_at: datetime = Field(default_factory=datetime.utcnow)
     created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class Interview(SQLModel, table=True):
+    __tablename__ = "interviews"
+
+    interview_id: Optional[int] = Field(default=None, primary_key=True)
+    candidate_id: int = Field(foreign_key="candidate.id", index=True)
+    job_id: Optional[int] = Field(default=None, foreign_key="jobs.job_id", index=True)
+    booking_token: str = Field(index=True, unique=True)
+    token_expires_at: datetime = Field(index=True)
+    proposed_slots: list[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
+    selected_slot_start: Optional[datetime] = Field(default=None)
+    selected_slot_end: Optional[datetime] = Field(default=None)
+    format: str = Field(default="Google Meet")
+    location_or_link: str = Field(default="")
+    interviewer_ids: list[int] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
+    calendar_event_id: Optional[str] = Field(default=None)
+    meet_link: Optional[str] = Field(default=None)
+    status: InterviewScheduleStatus = Field(
+        default=InterviewScheduleStatus.PENDING_BOOKING,
+        sa_column=Column(
+            SQLEnum(
+                InterviewScheduleStatus,
+                values_callable=lambda enum_cls: [member.value for member in enum_cls],
+                native_enum=False,
+                validate_strings=True,
+            ),
+            nullable=False,
+            default=InterviewScheduleStatus.PENDING_BOOKING.value,
+        ),
+    )
+    booked_at: Optional[datetime] = Field(default=None)
+    cancelled_at: Optional[datetime] = Field(default=None)
+    cancellation_reason: str = Field(default="")
+    notes: str = Field(default="")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
 class LeaveRequest(SQLModel, table=True):
