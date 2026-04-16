@@ -8,6 +8,59 @@ def _split_csv(value: str) -> list[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
+def _normalize_url(value: str) -> str:
+    return value.strip().rstrip("/")
+
+
+def _is_local_url(value: str) -> bool:
+    lowered = value.lower()
+    return (
+        "localhost" in lowered
+        or "127.0.0.1" in lowered
+        or "0.0.0.0" in lowered
+        or "::1" in lowered
+    )
+
+
+def _is_production_runtime() -> bool:
+    env = os.getenv("ENV", "").strip().lower()
+    app_env = os.getenv("APP_ENV", "").strip().lower()
+    render = os.getenv("RENDER", "").strip().lower() == "true"
+    return render or env in {"production", "prod"} or app_env in {"production", "prod"}
+
+
+def _resolve_frontend_base_url() -> str:
+    explicit = _normalize_url(os.getenv("FRONTEND_BASE_URL", ""))
+    if explicit and (not _is_local_url(explicit) or not _is_production_runtime()):
+        return explicit
+
+    allowed = _split_csv(os.getenv("ALLOWED_ORIGINS", ""))
+    for origin in allowed:
+        normalized = _normalize_url(origin)
+        if normalized and not _is_local_url(normalized):
+            return normalized
+
+    vercel_candidate = _normalize_url(
+        os.getenv("VERCEL_PROJECT_PRODUCTION_URL", "") or os.getenv("VERCEL_URL", "")
+    )
+    if vercel_candidate:
+        if vercel_candidate.startswith("http://") or vercel_candidate.startswith("https://"):
+            return vercel_candidate
+        return f"https://{vercel_candidate}"
+
+    return explicit or "http://localhost:5173"
+
+
+_RESOLVED_FRONTEND_BASE_URL = _resolve_frontend_base_url()
+
+
+def _resolve_signup_url() -> str:
+    explicit = _normalize_url(os.getenv("SIGNUP_URL", ""))
+    if explicit and (not _is_local_url(explicit) or not _is_production_runtime()):
+        return explicit
+    return f"{_RESOLVED_FRONTEND_BASE_URL}/employee/signup"
+
+
 @dataclass(frozen=True)
 class Settings:
     app_name: str = "Talent Spark HR Backend"
@@ -45,9 +98,9 @@ class Settings:
     smtp_user: str = os.getenv("SMTP_USER", "")
     smtp_pass: str = os.getenv("SMTP_PASS", "")
     company_name: str = os.getenv("COMPANY_NAME", "Talent Spark")
-    signup_url: str = os.getenv("SIGNUP_URL", "http://localhost:5173/employee/signup")
+    signup_url: str = _resolve_signup_url()
     openai_email_model: str = os.getenv("OPENAI_EMAIL_MODEL", "gpt-4o-mini-2024-07-18")
-    frontend_base_url: str = os.getenv("FRONTEND_BASE_URL", "http://localhost:5173")
+    frontend_base_url: str = _RESOLVED_FRONTEND_BASE_URL
     calendar_provider: str = os.getenv("CALENDAR_PROVIDER", "google")
     interview_duration_minutes: int = int(os.getenv("INTERVIEW_DURATION_MINUTES", "45"))
     working_hours_start: str = os.getenv("WORKING_HOURS_START", "09:00")
