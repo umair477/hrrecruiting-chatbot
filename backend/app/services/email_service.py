@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import socket
 import smtplib
 from email.mime.text import MIMEText
 from typing import Optional
@@ -27,13 +28,14 @@ class EmailService:
         employee_id: int | None = None,
         notification_type: str = "general",
     ) -> bool:
-        try:
-            if settings.sendgrid_api_key.strip():
-                EmailService._send_via_sendgrid(to=to, subject=subject, body=body)
-            else:
-                EmailService._send_via_smtp(to=to, subject=subject, body=body)
-        except Exception:
-            logger.exception("EmailService failed for recipient=%s subject=%s", to, subject)
+        transports = EmailService._get_transports()
+        if not transports:
+            logger.error(
+                "EmailService has no configured providers; set SENDGRID_API_KEY or SMTP credentials. "
+                "recipient=%s subject=%s",
+                to,
+                subject,
+            )
             EmailService._log_notification(
                 session=session,
                 employee_id=employee_id,
@@ -45,16 +47,71 @@ class EmailService:
             )
             return False
 
-        EmailService._log_notification(
-            session=session,
-            employee_id=employee_id,
-            notification_type=notification_type,
-            subject=subject,
-            body=body,
-            to_email=to,
-            status="sent",
-        )
-        return True
+        last_error: Exception | None = None
+        for transport in transports:
+            try:
+                if transport == "sendgrid":
+                    EmailService._send_via_sendgrid(to=to, subject=subject, body=body)
+                else:
+                    EmailService._send_via_smtp(to=to, subject=subject, body=body)
+                EmailService._log_notification(
+                    session=session,
+                    employee_id=employee_id,
+                    notification_type=notification_type,
+                    subject=subject,
+                    body=body,
+                    to_email=to,
+                    status="sent",
+                )
+                return True
+            except (smtplib.SMTPException, socket.gaierror, TimeoutError, OSError) as exc:
+                logger.warning(
+                    "EmailService provider=%s unavailable for recipient=%s subject=%s: %s",
+                    transport,
+                    to,
+                    subject,
+                    exc,
+                )
+                last_error = exc
+            except Exception as exc:
+                logger.exception(
+                    "EmailService provider=%s failed for recipient=%s subject=%s",
+                    transport,
+                    to,
+                    subject,
+                )
+                last_error = exc
+
+        if last_error is not None:
+            logger.error(
+                "EmailService exhausted all providers for recipient=%s subject=%s; last_error=%s",
+                to,
+                subject,
+                last_error,
+            )
+
+        if last_error is not None:
+            EmailService._log_notification(
+                session=session,
+                employee_id=employee_id,
+                notification_type=notification_type,
+                subject=subject,
+                body=body,
+                to_email=to,
+                status="failed",
+            )
+            return False
+
+        return False
+
+    @staticmethod
+    def _get_transports() -> list[str]:
+        transports: list[str] = []
+        if settings.sendgrid_api_key.strip():
+            transports.append("sendgrid")
+        if settings.smtp_host.strip() and settings.smtp_user.strip() and settings.smtp_pass.strip():
+            transports.append("smtp")
+        return transports
 
     @staticmethod
     def _send_via_sendgrid(*, to: str, subject: str, body: str) -> None:
