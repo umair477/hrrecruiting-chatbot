@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from datetime import date, datetime, time, timedelta, timezone
 import json
+import random
 from typing import Iterable
 from urllib.parse import quote_plus
 from uuid import uuid4
@@ -83,6 +85,42 @@ def _to_slot_read(start_at: datetime, end_at: datetime, *, slot_id: str | None =
         formatted_display=_format_slot_display(start_at, end_at),
         day_of_week=start_at.strftime("%A"),
     )
+
+
+def _select_diverse_random_slots(
+    slots: list[dict[str, datetime]],
+    limit: int,
+) -> list[dict[str, datetime]]:
+    if limit <= 0 or not slots:
+        return []
+    if len(slots) <= limit:
+        return sorted(slots, key=lambda slot: slot["start"])
+
+    slots_by_date: dict[date, list[dict[str, datetime]]] = defaultdict(list)
+    for slot in slots:
+        slots_by_date[slot["start"].date()].append(slot)
+
+    rng = random.SystemRandom()
+    dates = list(slots_by_date.keys())
+    rng.shuffle(dates)
+    for day_slots in slots_by_date.values():
+        rng.shuffle(day_slots)
+
+    selected: list[dict[str, datetime]] = []
+    for day in dates:
+        if len(selected) >= limit:
+            break
+        day_slots = slots_by_date[day]
+        if day_slots:
+            selected.append(day_slots.pop())
+
+    if len(selected) < limit:
+        remaining = [slot for day in dates for slot in slots_by_date[day]]
+        rng.shuffle(remaining)
+        selected.extend(remaining[: limit - len(selected)])
+
+    selected.sort(key=lambda slot: slot["start"])
+    return selected
 
 
 def _serialize_slots(slots: Iterable[InterviewProposedSlot]) -> list[dict[str, str]]:
@@ -283,7 +321,8 @@ def get_admin_available_slots(
     )
 
     max_slots = min(max(settings.slots_to_propose, 1), 10)
-    mapped = [_to_slot_read(slot["start"], slot["end"]) for slot in slots[:max_slots]]
+    selected_slots = _select_diverse_random_slots(slots, max_slots)
+    mapped = [_to_slot_read(slot["start"], slot["end"]) for slot in selected_slots]
     return InterviewAvailableSlotsResponse(slots=mapped)
 
 

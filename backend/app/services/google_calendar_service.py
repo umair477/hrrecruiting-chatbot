@@ -93,12 +93,12 @@ class GoogleCalendarService:
         current_day = range_start.date()
         end_day = range_end.date()
 
-        while current_day <= end_day and len(slots) < 10:
+        while current_day <= end_day:
             if current_day.weekday() < 5:
                 day_start = datetime.combine(current_day, working_start, tzinfo=timezone.utc)
                 day_end = datetime.combine(current_day, working_end, tzinfo=timezone.utc)
                 cursor = day_start
-                while cursor + duration <= day_end and len(slots) < 10:
+                while cursor + duration <= day_end:
                     candidate_start = cursor
                     candidate_end = cursor + duration
                     if candidate_start >= min_start and not self._overlaps_busy(
