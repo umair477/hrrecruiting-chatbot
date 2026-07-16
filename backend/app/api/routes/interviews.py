@@ -4,6 +4,7 @@ from collections import defaultdict
 from datetime import date, datetime, time, timedelta, timezone
 import json
 import random
+import re
 from typing import Iterable
 from urllib.parse import quote_plus
 from uuid import uuid4
@@ -47,6 +48,9 @@ from app.services.calendar_factory import CalendarServiceFactory
 from app.services.email_service import EmailService
 
 router = APIRouter(tags=["interviews"])
+_BOOKING_TOKEN_REGEX = re.compile(
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+)
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -64,6 +68,14 @@ def _candidate_name(candidate: Candidate) -> str:
 
 def _booking_url(token: str) -> str:
     return f"{settings.frontend_base_url.rstrip('/')}/schedule/{token}"
+
+
+def _normalize_booking_token(raw_token: str) -> str:
+    token = (raw_token or "").strip().strip("<>[](){}\"'.,;")
+    match = _BOOKING_TOKEN_REGEX.search(token)
+    if match:
+        return match.group(0).lower()
+    return token
 
 
 def _validate_range(date_from: date, date_to: date) -> None:
@@ -642,7 +654,8 @@ def get_booking_portal(
     booking_token: str,
     session: Session = Depends(get_session),
 ) -> InterviewBookingPortalRead:
-    interview = session.exec(select(Interview).where(Interview.booking_token == booking_token)).first()
+    normalized_token = _normalize_booking_token(booking_token)
+    interview = session.exec(select(Interview).where(Interview.booking_token == normalized_token)).first()
     if interview is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking link not found.")
 
@@ -685,7 +698,8 @@ def confirm_booking_slot(
     payload: InterviewBookingConfirmRequest,
     session: Session = Depends(get_session),
 ) -> InterviewBookingConfirmResponse:
-    interview = session.exec(select(Interview).where(Interview.booking_token == booking_token)).first()
+    normalized_token = _normalize_booking_token(booking_token)
+    interview = session.exec(select(Interview).where(Interview.booking_token == normalized_token)).first()
     if interview is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking link not found.")
 
@@ -840,7 +854,7 @@ def confirm_booking_slot(
             selected_start,
             selected_end,
         ),
-        ics_download_url=f"/api/interviews/booking/{booking_token}/calendar.ics",
+        ics_download_url=f"/api/interviews/booking/{interview.booking_token}/calendar.ics",
     )
 
 
@@ -849,7 +863,8 @@ def download_booking_ics(
     booking_token: str,
     session: Session = Depends(get_session),
 ) -> Response:
-    interview = session.exec(select(Interview).where(Interview.booking_token == booking_token)).first()
+    normalized_token = _normalize_booking_token(booking_token)
+    interview = session.exec(select(Interview).where(Interview.booking_token == normalized_token)).first()
     if interview is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking link not found.")
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 import json
 import logging
+import re
 from typing import Any
 from urllib import error, request
 
@@ -96,6 +97,20 @@ def _safe_generate(*, prompt: str, fallback_subject: str, fallback_body: str) ->
         "subject": fallback_subject,
         "body": fallback_body.strip(),
     }
+
+
+def _ensure_plain_booking_link(body: str, booking_url: str) -> str:
+    cleaned = (body or "").strip()
+    if not cleaned:
+        cleaned = "Please use the secure interview booking link below."
+
+    # Convert markdown links to plain text for text/plain email delivery.
+    cleaned = re.sub(r"\[([^\]]+)\]\((https?://[^\s)]+)\)", r"\1: \2", cleaned)
+
+    direct_link_block = f"Booking link (direct):\n{booking_url.strip()}"
+    if booking_url.strip() and direct_link_block not in cleaned:
+        cleaned = f"{cleaned}\n\n{direct_link_block}"
+    return cleaned.strip()
 
 
 def generate_welcome_email(
@@ -199,6 +214,8 @@ def generate_interview_self_scheduling_email(
         "- Congratulate the candidate for being shortlisted.\n"
         "- Explain they should choose one of the offered slots through the self-booking link.\n"
         "- Mention the booking link expires and they should respond within 24 hours.\n"
+        "- Output plain text only (no markdown links).\n"
+        "- Include the full booking URL exactly as provided.\n"
         "- Keep tone warm and encouraging.\n"
         "Return JSON with keys subject and body."
     )
@@ -230,7 +247,9 @@ def generate_interview_self_scheduling_email(
             f"Additional Notes: {additional_notes.strip()}\n\n"
             f"Best regards,\n{settings.email_from_name}"
         )
-    return _safe_generate(prompt=prompt, fallback_subject=fallback_subject, fallback_body=fallback_body)
+    payload = _safe_generate(prompt=prompt, fallback_subject=fallback_subject, fallback_body=fallback_body)
+    payload["body"] = _ensure_plain_booking_link(payload.get("body", ""), booking_url)
+    return payload
 
 
 def generate_interview_booking_confirmation_email(
